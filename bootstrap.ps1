@@ -5,10 +5,31 @@ param(
     [switch]$SkipInstall,
     [string]$DshHome = "$env:USERPROFILE\.dsh",
     [string]$DshProfileDir = "$env:APPDATA\dsh-desktop\harness\profiles\web",
-    [string]$CloakBrowserPath = "D:\Thanhpk\AI\cloakbrowser\mcp-server-full.mjs"
+    [string]$CloakBrowserPath = "D:\Thanhpk\AI\cloakbrowser\mcp-server-full.mjs",
+    [string]$CredentialsPath = "$env:APPDATA\dsh-desktop\harness\.credentials.yaml"
 )
 
 $ErrorActionPreference = "Stop"
+
+# Load-Env: read .env at $PSScriptRoot and set into [Environment] (process scope).
+$dotEnvPath = Join-Path $PSScriptRoot ".env"
+if (Test-Path $dotEnvPath) {
+    Write-Host "==> Loading .env from $dotEnvPath ..." -ForegroundColor Cyan
+    foreach ($line in (Get-Content -Path $dotEnvPath)) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) { continue }
+        $idx = $trimmed.IndexOf("=")
+        if ($idx -lt 1) { continue }
+        $k = $trimmed.Substring(0, $idx).Trim()
+        $v = $trimmed.Substring($idx + 1).Trim()
+        if ($v.Length -ge 2 -and (($v.StartsWith('"') -and $v.EndsWith('"')) -or ($v.StartsWith("'") -and $v.EndsWith("'")))) {
+            $v = $v.Substring(1, $v.Length - 2)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($k) -and -not [string]::IsNullOrWhiteSpace($v)) {
+            [Environment]::SetEnvironmentVariable($k, $v)
+        }
+    }
+}
 
 function Get-EnvOrPrompt {
     param(
@@ -153,7 +174,7 @@ $cordisTemplate = @'
   config:
     providers:
       anthropic:
-        baseURL: __PROVIDER_BASE_URL__
+        baseURL: __AI_BASE_URL__
         models:
           - id: claude-fable-5
             name: Claude Fable 5
@@ -272,7 +293,8 @@ $cordisTemplate = @'
 Write-Host "==> Preparing configuration file..." -ForegroundColor Cyan
 Write-Host ""
 Write-Host "==> Gathering configuration..." -ForegroundColor Cyan
-$providerBaseUrl = Get-EnvOrPrompt -EnvName "PROVIDER_BASE_URL" -PromptMessage "Provider Base URL" -DefaultValue "https://9router.thanhpk.io.vn/v1"
+$aiBaseUrl = Get-EnvOrPrompt -EnvName "AI_BASE_URL" -PromptMessage "AI Base URL" -DefaultValue "https://9router.thanhpk.io.vn/v1"
+$aiApiKey = Get-EnvOrPrompt -EnvName "AI_API_KEY" -PromptMessage "AI API Key" -DefaultValue ""
 $jiraUrl = Get-EnvOrPrompt -EnvName "JIRA_URL" -PromptMessage "Jira URL" -DefaultValue "https://jira.cybertech.vn"
 $jiraToken = Get-EnvOrPrompt -EnvName "JIRA_PERSONAL_TOKEN" -PromptMessage "Jira Personal Token" -DefaultValue "YOUR_JIRA_PERSONAL_TOKEN"
 $confUrl = Get-EnvOrPrompt -EnvName "CONFLUENCE_URL" -PromptMessage "Confluence URL" -DefaultValue "https://conf.cybertech.vn"
@@ -282,7 +304,7 @@ $context7ApiKey = Get-EnvOrPrompt -EnvName "CONTEXT7_API_KEY" -PromptMessage "Co
 $escapedCloakBrowser = $CloakBrowserPath -replace '\\', '\\'
 
 $cordisYaml = $cordisTemplate
-$cordisYaml = $cordisYaml.Replace("__PROVIDER_BASE_URL__", $providerBaseUrl)
+$cordisYaml = $cordisYaml.Replace("__AI_BASE_URL__", $aiBaseUrl)
 $cordisYaml = $cordisYaml.Replace("__JIRA_URL__", $jiraUrl)
 $cordisYaml = $cordisYaml.Replace("__JIRA_PERSONAL_TOKEN__", $jiraToken)
 $cordisYaml = $cordisYaml.Replace("__CONFLUENCE_URL__", $confUrl)
@@ -345,6 +367,34 @@ if (Test-Path $sourceSkillsDir) {
     }
 }
 
+
+Write-Host "==> Syncing AI API key into credentials file..." -ForegroundColor Cyan
+if (-not $DryRun -and -not [string]::IsNullOrWhiteSpace($aiApiKey)) {
+    $credDir = Split-Path -Parent $CredentialsPath
+    if (-not [string]::IsNullOrWhiteSpace($credDir) -and -not (Test-Path $credDir)) {
+        New-Item -ItemType Directory -Force -Path $credDir | Out-Null
+    }
+    if (Test-Path $CredentialsPath) {
+        $credRaw = Get-Content -Path $CredentialsPath -Raw
+        if ($credRaw -match '(?m)^(\s*)ANTHROPIC_API_KEY\s*:.*$') {
+            $credRaw = [regex]::Replace($credRaw, '(?m)^(\s*)ANTHROPIC_API_KEY\s*:.*$', ('$1ANTHROPIC_API_KEY: ' + $aiApiKey))
+        } elseif ($credRaw -match '(?m)^refs:\s*\{\}\s*$') {
+            $credRaw = [regex]::Replace($credRaw, '(?m)^refs:\s*\{\}\s*$', ("refs:`n  ANTHROPIC_API_KEY: " + $aiApiKey))
+        } elseif ($credRaw -match '(?m)^refs:\s*$') {
+            $credRaw = [regex]::Replace($credRaw, '(?m)^refs:\s*$', ("refs:`n  ANTHROPIC_API_KEY: " + $aiApiKey))
+        } else {
+            $credRaw = $credRaw.TrimEnd() + "`nrefs:`n  ANTHROPIC_API_KEY: $aiApiKey`n"
+        }
+        Set-Content -Path $CredentialsPath -Value $credRaw -Encoding UTF8
+        Write-Host "  -> Updated ANTHROPIC_API_KEY in $CredentialsPath" -ForegroundColor Green
+    } else {
+        $credNew = "version: 1`nrecords: {}`nrefs:`n  ANTHROPIC_API_KEY: $aiApiKey`n"
+        Set-Content -Path $CredentialsPath -Value $credNew -Encoding UTF8
+        Write-Host "  -> Created $CredentialsPath" -ForegroundColor Green
+    }
+} elseif ([string]::IsNullOrWhiteSpace($aiApiKey)) {
+    Write-Warning "AI_API_KEY is empty - skipping .credentials.yaml update."
+}
 
 Write-Host "`nBootstrap for DSH finished. Notes:" -ForegroundColor Green
 Write-Host '  - LLM auth uses apiKeyEnv ANTHROPIC_API_KEY (stored in harness .credentials.yaml). Set it in DSH Settings or via:'
