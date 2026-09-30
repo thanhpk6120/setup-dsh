@@ -57,6 +57,17 @@ foreach ($tool in @("node", "npm", "git")) {
     }
 }
 
+$nodeVersionStr = node -v
+if ($nodeVersionStr -match 'v(\d+)\.') {
+    $nodeMajor = [int]$matches[1]
+    if ($nodeMajor -lt 18) {
+        throw "Yêu cầu Node.js >= 18. Máy tính đang dùng bản cũ"
+    }
+} else {
+    throw "Không thể xác định version của Node.js"
+}
+
+
 # uv / uvx (required by company-atlassian MCP)
 if (-not $SkipInstall -and -not (Get-Command "uv" -ErrorAction SilentlyContinue)) {
     Write-Host "==> 'uv' not found. Installing uv..." -ForegroundColor Cyan
@@ -278,15 +289,7 @@ if ($gitnexusBin -and $gitnexusBin.Source) {
       - mcp
 "@
 } else {
-    $gitnexusConfig = @"
-    command: cmd
-    args:
-      - /c
-      - npx
-      - -y
-      - gitnexus@latest
-      - mcp
-"@
+    throw "gitnexus không tìm thấy bằng Get-Command"
 }
 
 # Dynamic path resolution: context7
@@ -309,14 +312,7 @@ try {
 } catch {}
 
 if (-not $context7Detected) {
-    $context7Config = @"
-    command: cmd
-    args:
-      - /c
-      - npx
-      - -y
-      - "@upstash/context7-mcp"
-"@
+    throw "context7 index.js không tìm thấy"
 }
 
 if (-not [string]::IsNullOrWhiteSpace($context7ApiKey)) {
