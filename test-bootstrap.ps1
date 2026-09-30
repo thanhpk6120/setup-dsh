@@ -4,6 +4,15 @@ $ErrorActionPreference = "Stop"
 $tempHome = Join-Path $env:TEMP ("dsh-home-test-" + [System.Guid]::NewGuid().ToString("N"))
 $tempProfile = Join-Path $env:TEMP ("dsh-profile-test-" + [System.Guid]::NewGuid().ToString("N"))
 
+$env:PROVIDER_BASE_URL = "https://mock.provider.com/v1"
+$env:JIRA_URL = "https://mock.jira.com"
+$env:JIRA_PERSONAL_TOKEN = "MOCK_JIRA_TOKEN"
+$env:CONFLUENCE_URL = "https://mock.conf.com"
+$env:CONFLUENCE_PERSONAL_TOKEN = "MOCK_CONF_TOKEN"
+$env:CONTEXT7_API_KEY = "MOCK_CONTEXT7_KEY"
+
+$oldErrorActionPreference = $ErrorActionPreference
+
 try {
     Write-Host "Running DSH bootstrap into temp dirs: $tempHome, $tempProfile"
     & "$PSScriptRoot\bootstrap.ps1" -DryRun:$false -SkipInstall -DshHome $tempHome -DshProfileDir $tempProfile
@@ -26,6 +35,25 @@ try {
     if ($yamlRaw.Contains("NTg5NDM4ODY3ODUzOvauX4uXJ")) {
         throw "ASSERTION FAILED: cordis.patch.yml leaked personal token instead of using env placeholder"
     }
+
+    if (-not $yamlRaw.Contains("baseURL: https://mock.provider.com/v1")) {
+        throw "ASSERTION FAILED: cordis.patch.yml did not replace PROVIDER_BASE_URL correctly"
+    }
+    if (-not $yamlRaw.Contains("JIRA_URL: https://mock.jira.com")) {
+        throw "ASSERTION FAILED: cordis.patch.yml did not replace JIRA_URL correctly"
+    }
+    if (-not $yamlRaw.Contains("JIRA_PERSONAL_TOKEN: MOCK_JIRA_TOKEN")) {
+        throw "ASSERTION FAILED: cordis.patch.yml did not replace JIRA_PERSONAL_TOKEN correctly"
+    }
+    if (-not $yamlRaw.Contains("CONFLUENCE_URL: https://mock.conf.com")) {
+        throw "ASSERTION FAILED: cordis.patch.yml did not replace CONFLUENCE_URL correctly"
+    }
+    if (-not $yamlRaw.Contains("CONFLUENCE_PERSONAL_TOKEN: MOCK_CONF_TOKEN")) {
+        throw "ASSERTION FAILED: cordis.patch.yml did not replace CONFLUENCE_PERSONAL_TOKEN correctly"
+    }
+    if (-not $yamlRaw.Contains("CONTEXT7_API_KEY: MOCK_CONTEXT7_KEY")) {
+        throw "ASSERTION FAILED: cordis.patch.yml did not replace CONTEXT7_API_KEY correctly"
+    }
     
 
     $agentsPath = Join-Path $tempHome "AGENTS.md"
@@ -41,6 +69,12 @@ try {
     Write-Host "TEST PASSED: DSH bootstrap created valid configs." -ForegroundColor Green
 }
 finally {
+    Remove-Item env:PROVIDER_BASE_URL -ErrorAction SilentlyContinue
+    Remove-Item env:JIRA_URL -ErrorAction SilentlyContinue
+    Remove-Item env:JIRA_PERSONAL_TOKEN -ErrorAction SilentlyContinue
+    Remove-Item env:CONFLUENCE_URL -ErrorAction SilentlyContinue
+    Remove-Item env:CONFLUENCE_PERSONAL_TOKEN -ErrorAction SilentlyContinue
+    Remove-Item env:CONTEXT7_API_KEY -ErrorAction SilentlyContinue
     if (Test-Path $tempHome) { Remove-Item -Recurse -Force $tempHome }
     if (Test-Path $tempProfile) { Remove-Item -Recurse -Force $tempProfile }
 }

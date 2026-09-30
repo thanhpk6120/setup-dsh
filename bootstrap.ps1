@@ -10,6 +10,27 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Get-EnvOrPrompt {
+    param(
+        [string]$EnvName,
+        [string]$PromptMessage,
+        [string]$DefaultValue
+    )
+    $val = [Environment]::GetEnvironmentVariable($EnvName)
+    if ([string]::IsNullOrWhiteSpace($val)) {
+        if ([string]::IsNullOrWhiteSpace($DefaultValue)) {
+            $val = Read-Host "$PromptMessage (leave empty for none)"
+        } else {
+            $val = Read-Host "$PromptMessage [$DefaultValue]"
+            if ([string]::IsNullOrWhiteSpace($val)) {
+                $val = $DefaultValue
+            }
+        }
+    }
+    return $val
+}
+
+
 Write-Host "==> Checking runtime dependencies..." -ForegroundColor Cyan
 foreach ($tool in @("node", "npm", "git")) {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
@@ -132,7 +153,7 @@ $cordisTemplate = @'
   config:
     providers:
       anthropic:
-        baseURL: https://9router.thanhpk.io.vn/v1
+        baseURL: __PROVIDER_BASE_URL__
         models:
           - id: claude-fable-5
             name: Claude Fable 5
@@ -223,9 +244,9 @@ $cordisTemplate = @'
       - mcp-atlassian==0.23.1
       - mcp-atlassian
     env:
-      JIRA_URL: https://jira.cybertech.vn
+      JIRA_URL: __JIRA_URL__
       JIRA_PERSONAL_TOKEN: __JIRA_PERSONAL_TOKEN__
-      CONFLUENCE_URL: https://conf.cybertech.vn
+      CONFLUENCE_URL: __CONFLUENCE_URL__
       CONFLUENCE_PERSONAL_TOKEN: __CONFLUENCE_PERSONAL_TOKEN__
       TOOLSETS: jira,confluence
 - id: mcp-cloakbrowser
@@ -244,14 +265,32 @@ $cordisTemplate = @'
     command: node
     args:
       - __CONTEXT7_JS_PATH__
+    env:
+      CONTEXT7_API_KEY: __CONTEXT7_API_KEY__
 '@
 
 Write-Host "==> Preparing configuration file..." -ForegroundColor Cyan
-$jiraToken = if ($env:JIRA_PERSONAL_TOKEN) { $env:JIRA_PERSONAL_TOKEN } else { "YOUR_JIRA_PERSONAL_TOKEN" }
-$confToken = if ($env:CONFLUENCE_PERSONAL_TOKEN) { $env:CONFLUENCE_PERSONAL_TOKEN } else { "YOUR_CONFLUENCE_PERSONAL_TOKEN" }
+Write-Host ""
+Write-Host "==> Gathering configuration..." -ForegroundColor Cyan
+$providerBaseUrl = Get-EnvOrPrompt -EnvName "PROVIDER_BASE_URL" -PromptMessage "Provider Base URL" -DefaultValue "https://9router.thanhpk.io.vn/v1"
+$jiraUrl = Get-EnvOrPrompt -EnvName "JIRA_URL" -PromptMessage "Jira URL" -DefaultValue "https://jira.cybertech.vn"
+$jiraToken = Get-EnvOrPrompt -EnvName "JIRA_PERSONAL_TOKEN" -PromptMessage "Jira Personal Token" -DefaultValue "YOUR_JIRA_PERSONAL_TOKEN"
+$confUrl = Get-EnvOrPrompt -EnvName "CONFLUENCE_URL" -PromptMessage "Confluence URL" -DefaultValue "https://conf.cybertech.vn"
+$confToken = Get-EnvOrPrompt -EnvName "CONFLUENCE_PERSONAL_TOKEN" -PromptMessage "Confluence Personal Token" -DefaultValue "YOUR_CONFLUENCE_PERSONAL_TOKEN"
+$context7ApiKey = Get-EnvOrPrompt -EnvName "CONTEXT7_API_KEY" -PromptMessage "Context7 API Key" -DefaultValue ""
+
 $escapedCloakBrowser = $CloakBrowserPath -replace '\\', '\\'
 
-$cordisYaml = $cordisTemplate.Replace("__JIRA_PERSONAL_TOKEN__", $jiraToken).Replace("__CONFLUENCE_PERSONAL_TOKEN__", $confToken).Replace("__CLOAKBROWSER_PATH__", $escapedCloakBrowser).Replace("__GITNEXUS_ABS_PATH__", ($gitnexusAbs -replace '\\', '\\')).Replace("__CONTEXT7_JS_PATH__", ($context7Abs -replace '\\', '\\'))
+$cordisYaml = $cordisTemplate
+$cordisYaml = $cordisYaml.Replace("__PROVIDER_BASE_URL__", $providerBaseUrl)
+$cordisYaml = $cordisYaml.Replace("__JIRA_URL__", $jiraUrl)
+$cordisYaml = $cordisYaml.Replace("__JIRA_PERSONAL_TOKEN__", $jiraToken)
+$cordisYaml = $cordisYaml.Replace("__CONFLUENCE_URL__", $confUrl)
+$cordisYaml = $cordisYaml.Replace("__CONFLUENCE_PERSONAL_TOKEN__", $confToken)
+$cordisYaml = $cordisYaml.Replace("__CONTEXT7_API_KEY__", $context7ApiKey)
+$cordisYaml = $cordisYaml.Replace("__CLOAKBROWSER_PATH__", $escapedCloakBrowser)
+$cordisYaml = $cordisYaml.Replace("__GITNEXUS_ABS_PATH__", ($gitnexusAbs -replace '\\', '\\'))
+$cordisYaml = $cordisYaml.Replace("__CONTEXT7_JS_PATH__", ($context7Abs -replace '\\', '\\'))
 if (-not (Test-Path $CloakBrowserPath)) {
     Write-Warning "CloakBrowser server not found at '$CloakBrowserPath' - omitting mcp-cloakbrowser from cordis.patch.yml"
     $cordisYaml = $cordisYaml -replace "(?ms)\r?\n- id: mcp-cloakbrowser\r?\n(?:.*\r?\n)*?      - __CLOAKBROWSER_PATH__".Replace("__CLOAKBROWSER_PATH__", [regex]::Escape($escapedCloakBrowser)), ''
