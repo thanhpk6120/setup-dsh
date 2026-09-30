@@ -19,6 +19,18 @@ File cấu hình `cordis.patch.yml` được đặt vào thư mục profile củ
    - **company-atlassian**: Pinned version qua `uvx --from mcp-atlassian==0.23.1 mcp-atlassian`
    - **context7**: Lệnh node trỏ file index.js cài global của `@upstash/context7-mcp`
   
+## Cài đặt nhanh (1 dòng lệnh duy nhất)
+
+Mở PowerShell trên máy mới và chạy:
+
+```powershell
+irm https://raw.githubusercontent.com/thanhpk6120/setup-dsh/main/install.ps1 | iex
+```
+
+---
+
+## Chạy thủ công từ repo
+
 ## Chạy bootstrap
 
 ```powershell
