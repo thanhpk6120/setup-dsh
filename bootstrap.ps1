@@ -57,14 +57,14 @@ foreach ($tool in @("node", "npm", "git")) {
     }
 }
 
-$nodeVersionStr = node -v
-if ($nodeVersionStr -match 'v(\d+)\.') {
-    $nodeMajor = [int]$matches[1]
-    if ($nodeMajor -lt 18) {
-        throw "Yêu cầu Node.js >= 18. Máy tính đang dùng bản cũ"
-    }
-} else {
-    throw "Không thể xác định version của Node.js"
+$nodeVerRaw = (node -v).Trim()
+try {
+    $nodeVer = [version]($nodeVerRaw.TrimStart('v'))
+} catch {
+    throw "Không thể xác định version của Node.js: '$nodeVerRaw'."
+}
+if ($nodeVer -lt [version]"22.18.0") {
+    throw "Yêu cầu Node.js >= 22.18.0 (do memorix yêu cầu >= 22.18.0, gitnexus yêu cầu ^22.18.0 || >= 24.11.0, context7 yêu cầu >= 20.18.1). Phiên bản hiện tại: '$nodeVerRaw'. Vui lòng nâng cấp Node.js."
 }
 
 
