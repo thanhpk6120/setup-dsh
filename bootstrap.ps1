@@ -34,20 +34,35 @@ function Get-EnvOrPrompt {
     param(
         [string]$EnvName,
         [string]$PromptMessage,
-        [string]$DefaultValue
+        [string]$DefaultValue,
+        [switch]$AllowEmpty
     )
-    $val = [Environment]::GetEnvironmentVariable($EnvName)
-    if ([string]::IsNullOrWhiteSpace($val)) {
-        if ([string]::IsNullOrWhiteSpace($DefaultValue)) {
-            $val = Read-Host "$PromptMessage (leave empty for none)"
-        } else {
-            $val = Read-Host "$PromptMessage [$DefaultValue]"
-            if ([string]::IsNullOrWhiteSpace($val)) {
-                $val = $DefaultValue
-            }
+    $val = [Environment]::GetEnvironmentVariable($EnvName, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($val)) { return $val }
+    if ($AllowEmpty -and $val -ne $null) { return $val }
+
+    $hasDefault = $PSBoundParameters.ContainsKey('DefaultValue') -or -not [string]::IsNullOrWhiteSpace($DefaultValue)
+    while ($true) {
+        $promptStr = if ($hasDefault) { "$PromptMessage [$DefaultValue]" } elseif ($AllowEmpty) { "$PromptMessage (leave empty for none)" } else { $PromptMessage }
+        try {
+            $inputVal = Read-Host $promptStr
+        } catch {
+            if ($hasDefault) { return $DefaultValue }
+            if ($AllowEmpty) { return "" }
+            throw ("Error reading prompt for " + $EnvName + ": " + $_.Exception.Message)
         }
+        
+        if (-not [string]::IsNullOrWhiteSpace($inputVal)) {
+            return $inputVal.Trim()
+        }
+        if ($hasDefault) {
+            return $DefaultValue
+        }
+        if ($AllowEmpty) {
+            return ""
+        }
+        Write-Host "Lỗi: '$EnvName' không được bỏ trống. Vui lòng nhập giá trị." -ForegroundColor Red
     }
-    return $val
 }
 
 Write-Host "==> Checking runtime dependencies..." -ForegroundColor Cyan
@@ -274,7 +289,7 @@ $jiraUrl = Get-EnvOrPrompt -EnvName "JIRA_URL" -PromptMessage "Jira URL" -Defaul
 $jiraToken = Get-EnvOrPrompt -EnvName "JIRA_PERSONAL_TOKEN" -PromptMessage "Jira Personal Token" -DefaultValue "YOUR_JIRA_PERSONAL_TOKEN"
 $confUrl = Get-EnvOrPrompt -EnvName "CONFLUENCE_URL" -PromptMessage "Confluence URL" -DefaultValue "https://conf.cybertech.vn"
 $confToken = Get-EnvOrPrompt -EnvName "CONFLUENCE_PERSONAL_TOKEN" -PromptMessage "Confluence Personal Token" -DefaultValue "YOUR_CONFLUENCE_PERSONAL_TOKEN"
-$context7ApiKey = Get-EnvOrPrompt -EnvName "CONTEXT7_API_KEY" -PromptMessage "Context7 API Key" -DefaultValue ""
+$context7ApiKey = Get-EnvOrPrompt -EnvName "CONTEXT7_API_KEY" -PromptMessage "Context7 API Key" -AllowEmpty
 
 # Dynamic path resolution: gitnexus
 $gitnexusConfig = ""
