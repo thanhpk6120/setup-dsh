@@ -18,8 +18,7 @@ File cấu hình `cordis.patch.yml` được đặt vào thư mục profile củ
    - **gitnexus**: Đường dẫn cmd tuyệt đối trỏ tới bin cài global
    - **company-atlassian**: Pinned version qua `uvx --from mcp-atlassian==0.23.1 mcp-atlassian`
    - **context7**: Lệnh node trỏ file index.js cài global của `@upstash/context7-mcp`
-   - **cloakbrowser**: Chạy script local `cloakbrowser/mcp-server-full.mjs`
-
+  
 ## Chạy bootstrap
 
 ```powershell

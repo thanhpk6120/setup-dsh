@@ -5,7 +5,6 @@ param(
     [switch]$SkipInstall,
     [string]$DshHome = "$env:USERPROFILE\.dsh",
     [string]$DshProfileDir = "$env:APPDATA\dsh-desktop\harness\profiles\web",
-    [string]$CloakBrowserPath = "D:\Thanhpk\AI\cloakbrowser\mcp-server-full.mjs",
     [string]$CredentialsPath = "$env:APPDATA\dsh-desktop\harness\.credentials.yaml"
 )
 
@@ -51,7 +50,6 @@ function Get-EnvOrPrompt {
     return $val
 }
 
-
 Write-Host "==> Checking runtime dependencies..." -ForegroundColor Cyan
 foreach ($tool in @("node", "npm", "git")) {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
@@ -94,45 +92,27 @@ if (-not $SkipInstall -and -not (Get-Command "memorix" -ErrorAction SilentlyCont
     }
 }
 
-# gitnexus: vendor recommends a global install + absolute-path config to avoid npx
-# cold-cache stalls exceeding the 30s MCP timeout
-# (https://github.com/abhigyanpatwari/GitNexus README, "Fastest MCP startup").
-$gitnexusAbs = "__GITNEXUS_ABS_PATH__"
 if (-not $SkipInstall) {
     Write-Host "==> Installing gitnexus globally..." -ForegroundColor Cyan
     if (-not $DryRun) {
         try {
             npm install -g gitnexus --silent
         } catch {
-            Write-Warning "gitnexus global install failed, falling back to detected path: $($_.Exception.Message)"
+            Write-Warning "gitnexus global install failed: $($_.Exception.Message)"
         }
     }
 }
-$gitnexusBin = Get-Command "gitnexus" -ErrorAction SilentlyContinue
-if ($gitnexusBin -and $gitnexusBin.Source) {
-    $gitnexusAbs = $gitnexusBin.Source
-}
 
-$context7Abs = "__CONTEXT7_JS_PATH__"
 if (-not $SkipInstall) {
     Write-Host "==> Installing context7 globally..." -ForegroundColor Cyan
     if (-not $DryRun) {
         try {
             npm install -g @upstash/context7-mcp --silent
         } catch {
-            Write-Warning "context7 global install failed, falling back to detected path: $($_.Exception.Message)"
+            Write-Warning "context7 global install failed: $($_.Exception.Message)"
         }
     }
 }
-try {
-    $npmGlobalRoot = npm root -g 2>$null
-    if ($npmGlobalRoot) {
-        $ctxJsPath = Join-Path $npmGlobalRoot "@upstash\context7-mcp\dist\index.js"
-        if (Test-Path $ctxJsPath) {
-            $context7Abs = $ctxJsPath
-        }
-    }
-} catch {}
 
 Write-Host "==> Ensuring directory $DshProfileDir exists..." -ForegroundColor Cyan
 if (-not $DryRun) {
@@ -142,7 +122,7 @@ if (-not $DryRun) {
 # cordis.patch.yml template — mirrors live profile; placeholders resolved below.
 #   llm-pi-ai (anthropic @ 9router): 4 models claude-fable-5 / claude-haiku-4-5-20251001 / claude-opus-5 / claude-sonnet-5
 #   subagent-model-selection-settings: all 4 models allowed
-#   MCPs: memorix / gitnexus / company-atlassian (pinned mcp-atlassian==0.23.1) / cloakbrowser / context7
+#   MCPs: memorix / gitnexus / company-atlassian (pinned mcp-atlassian==0.23.1) / context7
 $cordisTemplate = @'
 # Your patch layer for this dsh profile, applied after every bundle layer:
 # a top-level YAML array of loader patch entries (id-targeted config
@@ -249,11 +229,7 @@ $cordisTemplate = @'
   config:
     serverName: gitnexus
     transport: stdio
-    command: cmd
-    args:
-      - /c
-      - __GITNEXUS_ABS_PATH__
-      - mcp
+__GITNEXUS_CONFIG__
 - id: mcp-company-atlassian
   name: "@deepseek-ai/dsh-mcp-client"
   config:
@@ -270,24 +246,12 @@ $cordisTemplate = @'
       CONFLUENCE_URL: __CONFLUENCE_URL__
       CONFLUENCE_PERSONAL_TOKEN: __CONFLUENCE_PERSONAL_TOKEN__
       TOOLSETS: jira,confluence
-- id: mcp-cloakbrowser
-  name: "@deepseek-ai/dsh-mcp-client"
-  config:
-    serverName: cloakbrowser
-    transport: stdio
-    command: node
-    args:
-      - __CLOAKBROWSER_PATH__
 - id: mcp-context7
   name: "@deepseek-ai/dsh-mcp-client"
   config:
     serverName: context7
     transport: stdio
-    command: node
-    args:
-      - __CONTEXT7_JS_PATH__
-    env:
-      CONTEXT7_API_KEY: __CONTEXT7_API_KEY__
+__CONTEXT7_CONFIG__
 '@
 
 Write-Host "==> Preparing configuration file..." -ForegroundColor Cyan
@@ -301,7 +265,66 @@ $confUrl = Get-EnvOrPrompt -EnvName "CONFLUENCE_URL" -PromptMessage "Confluence 
 $confToken = Get-EnvOrPrompt -EnvName "CONFLUENCE_PERSONAL_TOKEN" -PromptMessage "Confluence Personal Token" -DefaultValue "YOUR_CONFLUENCE_PERSONAL_TOKEN"
 $context7ApiKey = Get-EnvOrPrompt -EnvName "CONTEXT7_API_KEY" -PromptMessage "Context7 API Key" -DefaultValue ""
 
-$escapedCloakBrowser = $CloakBrowserPath -replace '\\', '\\'
+# Dynamic path resolution: gitnexus
+$gitnexusConfig = ""
+$gitnexusBin = Get-Command "gitnexus" -ErrorAction SilentlyContinue
+if ($gitnexusBin -and $gitnexusBin.Source) {
+    $gnPath = $gitnexusBin.Source -replace '\\', '\\'
+    $gitnexusConfig = @"
+    command: cmd
+    args:
+      - /c
+      - "$gnPath"
+      - mcp
+"@
+} else {
+    $gitnexusConfig = @"
+    command: cmd
+    args:
+      - /c
+      - npx
+      - -y
+      - gitnexus@latest
+      - mcp
+"@
+}
+
+# Dynamic path resolution: context7
+$context7Config = ""
+$context7Detected = $false
+try {
+    $npmGlobalRoot = npm root -g 2>$null
+    if ($npmGlobalRoot) {
+        $ctxJsPath = Join-Path $npmGlobalRoot "@upstash\context7-mcp\dist\index.js"
+        if (Test-Path $ctxJsPath) {
+            $context7Detected = $true
+            $c7Path = $ctxJsPath -replace '\\', '\\'
+            $context7Config = @"
+    command: node
+    args:
+      - "$c7Path"
+"@
+        }
+    }
+} catch {}
+
+if (-not $context7Detected) {
+    $context7Config = @"
+    command: cmd
+    args:
+      - /c
+      - npx
+      - -y
+      - "@upstash/context7-mcp"
+"@
+}
+
+if (-not [string]::IsNullOrWhiteSpace($context7ApiKey)) {
+    $context7Config += @"
+`n    env:
+      CONTEXT7_API_KEY: $context7ApiKey
+"@
+}
 
 $cordisYaml = $cordisTemplate
 $cordisYaml = $cordisYaml.Replace("__AI_BASE_URL__", $aiBaseUrl)
@@ -309,14 +332,8 @@ $cordisYaml = $cordisYaml.Replace("__JIRA_URL__", $jiraUrl)
 $cordisYaml = $cordisYaml.Replace("__JIRA_PERSONAL_TOKEN__", $jiraToken)
 $cordisYaml = $cordisYaml.Replace("__CONFLUENCE_URL__", $confUrl)
 $cordisYaml = $cordisYaml.Replace("__CONFLUENCE_PERSONAL_TOKEN__", $confToken)
-$cordisYaml = $cordisYaml.Replace("__CONTEXT7_API_KEY__", $context7ApiKey)
-$cordisYaml = $cordisYaml.Replace("__CLOAKBROWSER_PATH__", $escapedCloakBrowser)
-$cordisYaml = $cordisYaml.Replace("__GITNEXUS_ABS_PATH__", ($gitnexusAbs -replace '\\', '\\'))
-$cordisYaml = $cordisYaml.Replace("__CONTEXT7_JS_PATH__", ($context7Abs -replace '\\', '\\'))
-if (-not (Test-Path $CloakBrowserPath)) {
-    Write-Warning "CloakBrowser server not found at '$CloakBrowserPath' - omitting mcp-cloakbrowser from cordis.patch.yml"
-    $cordisYaml = $cordisYaml -replace "(?ms)\r?\n- id: mcp-cloakbrowser\r?\n(?:.*\r?\n)*?      - __CLOAKBROWSER_PATH__".Replace("__CLOAKBROWSER_PATH__", [regex]::Escape($escapedCloakBrowser)), ''
-}
+$cordisYaml = $cordisYaml.Replace("__GITNEXUS_CONFIG__", $gitnexusConfig.TrimEnd())
+$cordisYaml = $cordisYaml.Replace("__CONTEXT7_CONFIG__", $context7Config.TrimEnd())
 
 $targetPath = Join-Path $DshProfileDir "cordis.patch.yml"
 if (Test-Path $targetPath) {
@@ -366,7 +383,6 @@ if (Test-Path $sourceSkillsDir) {
         }
     }
 }
-
 
 Write-Host "==> Syncing AI API key into credentials file..." -ForegroundColor Cyan
 if (-not $DryRun -and -not [string]::IsNullOrWhiteSpace($aiApiKey)) {
