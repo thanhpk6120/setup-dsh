@@ -31,6 +31,12 @@ description: Use when the user asks to initialize, regenerate, refresh, audit, o
 
 > **Multi-Agent Orchestration Contract:** Phiên chính đóng vai trò Dispatcher/Control. Bắt buộc sử dụng tool `task` gọi agent `docs-init` (hoặc `docs-update`) để phân tích toàn hệ thống và soạn tài liệu, chia slice theo service/module khi khảo sát nhiều phần. Sau đó gọi `docs-reviewer` đánh giá chất lượng trước khi gửi người dùng duyệt.
 
+## Quy tắc Bảo toàn Tài liệu (MANDATORY INVARIANT)
+> **TUYỆT ĐỐI KHÔNG XÓA (ADDITIVE-ONLY):** Khi tài liệu (các file trong `docs/`) đã tồn tại, **NGHIÊM CẤM** xóa bỏ, ghi đè trắng (overwrite/regenerate) toàn bộ file làm mất các phần (section), đoạn văn, hoặc ghi chú đã có. 
+> - CHỈ được phép **bổ sung thêm** thông tin mới (append/additive update) hoặc điều chỉnh nội dung cũ nếu thực sự sai lệch so với code thực tế.
+> - Mọi nội dung cũ do con người viết (context, business rules, giải thích ngoại lệ) phải được giữ nguyên vẹn.
+> - Phải dùng thao tác chỉnh sửa từng phần (patch/diff) thay vì đè nội dung mới hoàn toàn lên file cũ.
+
 ## Quy trình
 
 ### 0. Bắt buộc trước khi viết
@@ -93,3 +99,4 @@ description: Use when the user asks to initialize, regenerate, refresh, audit, o
 - AI **không** code, không mở PR đến service repo.
 - Nếu thiếu thông tin để xác nhận một phần, phải ghi "chưa xác nhận" kèm lý do thay vì tự đoán.
 - Mọi thay đổi đều được đề xuất dạng diff và chờ TechLead approve (Gate 2 trong `README.md`).
+- **Bảo toàn dữ liệu:** Phải đảm bảo không làm mất hoặc xóa lầm bất kỳ nội dung cũ nào trong quá trình cập nhật tài liệu.
