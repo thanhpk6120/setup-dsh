@@ -31,6 +31,15 @@ Plans must consist of discrete, atomic phases containing executable tasks. Each 
 - All task descriptions must include specific file paths, function names, and exact implementation details
 - No task should require human interpretation or decision-making
 
+## Mandatory Evidence Loop (Bắt buộc khi thực thi Plan)
+
+Mọi implementation plan được tạo ra phải tuân thủ nghiêm ngặt vòng lặp kiểm chứng bằng chứng (Evidence Loop) khi thực thi từng task thuộc tính năng đó:
+- **Sinh bằng chứng (Generate Evidence):** BẮT BUỘC chụp ảnh (screenshot `.png`) HOẶC xuất file output `.json`, `.txt`, `.md` chứa kết quả chạy thật của các lệnh kiểm thử/chức năng sau khi xong một task.
+- **Lưu trữ (Store):** Lưu file bằng chứng vào thư mục `evidence/` của feature đang thực hiện (ví dụ: `docs/features/<TICKET-ID>/evidence/<task-id>_<slug>.<ext>`). Bằng chứng phải được liên kết vào cột `Evidence` trong bảng Task.
+- **Tự kiểm tra (Self-Verify):** Tự động đối chiếu bằng chứng với yêu cầu/chấp nhận (acceptance criteria) của task.
+- **Vòng lặp sửa lỗi (Iterate):** Nếu bằng chứng chưa đạt yêu cầu, phải tiếp tục sửa code, cập nhật lại file bằng chứng và tự kiểm tra lại.
+- **Hoàn thành (Done):** Chỉ được đánh dấu task là xong (`Completed: ✅`) khi TẤT CẢ bằng chứng đều đạt yêu cầu 100%.
+
 ## AI-Optimized Implementation Standards
 
 - Use explicit, unambiguous language with zero interpretation required
@@ -126,22 +135,20 @@ tags: [Optional: List of relevant tags or categories, e.g., `feature`, `upgrade`
 ### Implementation Phase 1
 
 - GOAL-001: [Describe the goal of this phase, e.g., "Implement feature X", "Refactor module Y", etc.]
-
-| Task | Description | Completed | Date |
-|------|-------------|-----------|------|
-| TASK-001 | Description of task 1 | ✅ | 2025-04-25 |
-| TASK-002 | Description of task 2 | |  |
-| TASK-003 | Description of task 3 | |  |
+| Task | Description | Evidence | Completed | Date |
+|------|-------------|----------|-----------|------|
+| TASK-001 | Description of task 1 | `evidence/TASK-001_success.txt` | ✅ | 2025-04-25 |
+| TASK-002 | Description of task 2 | | |  |
+| TASK-003 | Description of task 3 | | |  |
 
 ### Implementation Phase 2
 
 - GOAL-002: [Describe the goal of this phase, e.g., "Implement feature X", "Refactor module Y", etc.]
-
-| Task | Description | Completed | Date |
-|------|-------------|-----------|------|
-| TASK-004 | Description of task 4 | |  |
-| TASK-005 | Description of task 5 | |  |
-| TASK-006 | Description of task 6 | |  |
+| Task | Description | Evidence | Completed | Date |
+|------|-------------|----------|-----------|------|
+| TASK-004 | Description of task 4 | | |  |
+| TASK-005 | Description of task 5 | | |  |
+| TASK-006 | Description of task 6 | | |  |
 
 ## 3. Alternatives
 
