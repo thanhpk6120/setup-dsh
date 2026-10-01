@@ -271,7 +271,7 @@ __GITNEXUS_CONFIG__
       JIRA_PERSONAL_TOKEN: __JIRA_PERSONAL_TOKEN__
       CONFLUENCE_URL: __CONFLUENCE_URL__
       CONFLUENCE_PERSONAL_TOKEN: __CONFLUENCE_PERSONAL_TOKEN__
-      TOOLSETS: jira,confluence
+      TOOLSETS: default
 - id: mcp-context7
   name: "@deepseek-ai/dsh-mcp-client"
   config:
