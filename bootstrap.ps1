@@ -293,7 +293,91 @@ __GITNEXUS_CONFIG__
     serverName: context7
     transport: stdio
 __CONTEXT7_CONFIG__
+- id: mcp-cloakbrowser
+  name: "@deepseek-ai/dsh-mcp-client"
+  config:
+    serverName: cloakbrowser
+    transport: stdio
+    command: node
+    args:
+      - "__CLOAKBROWSER_SCRIPT__"
 '@
+
+function Get-CloakBrowserInstallDir {
+    param([string]$EnvVarName = "CLOAKBROWSER_DIR")
+    $envVal = [Environment]::GetEnvironmentVariable($EnvVarName, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($envVal)) { return $envVal.Trim() }
+    
+    $drives = @()
+    try {
+        $drives = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -eq 3 } | Sort-Object FreeSpace -Descending
+    } catch {
+        $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 0 } | Sort-Object Free -Descending
+    }
+    if (-not $drives -or $drives.Count -eq 0) { return "$env:USERPROFILE\mcp-servers\cloakbrowser" }
+
+    $defaultDrive = $drives | Where-Object { ($_.DeviceID -eq 'D:' -or $_.Name -eq 'D') } | Select-Object -First 1
+    if (-not $defaultDrive) { $defaultDrive = $drives[0] }
+    $defaultLetter = if ($defaultDrive.DeviceID) { $defaultDrive.DeviceID } else { "$($defaultDrive.Name):" }
+
+    if ([Environment]::GetEnvironmentVariable("CI") -or -not [Environment]::UserInteractive) {
+        return "$defaultLetter\mcp-servers\cloakbrowser"
+    }
+
+    Write-Host "`n==> Quet danh sach o dia (Local Drives) de cai dat CloakBrowser MCP:" -ForegroundColor Cyan
+    for ($i = 0; $i -lt $drives.Count; $i++) {
+        $d = $drives[$i]
+        $devId = if ($d.DeviceID) { $d.DeviceID } else { "$($d.Name):" }
+        $volName = if ($d.VolumeName) { " ($($d.VolumeName))" } else { "" }
+        $freeGB = [math]::Round(((if ($d.FreeSpace) { $d.FreeSpace } else { $d.Free }) / 1GB), 2)
+        $sizeGB = if ($d.Size) { [math]::Round(($d.Size / 1GB), 2) } else { "N/A" }
+        Write-Host "  [$($i+1)] O $devId$volName | Trong: $freeGB GB / $sizeGB GB"
+    }
+
+    $promptMsg = "Chon so thu tu o dia muon luu CloakBrowser (mac dinh o $defaultLetter)"
+    try {
+        $inputVal = Read-Host $promptMsg
+        if (-not [string]::IsNullOrWhiteSpace($inputVal)) {
+            $choice = $inputVal.Trim()
+            $idx = 0
+            if ([int]::TryParse($choice, [ref]$idx) -and $idx -ge 1 -and $idx -le $drives.Count) {
+                $chosen = $drives[$idx - 1]
+                $chosenLetter = if ($chosen.DeviceID) { $chosen.DeviceID } else { "$($chosen.Name):" }
+                return "$chosenLetter\mcp-servers\cloakbrowser"
+            }
+        }
+    } catch {}
+    return "$defaultLetter\mcp-servers\cloakbrowser"
+}
+
+function Setup-CloakBrowser {
+    param([string]$TargetDir, [string]$SourceDir, [switch]$DryRun, [switch]$SkipInstall)
+    Write-Host "==> Cau hinh CloakBrowser tai: $TargetDir" -ForegroundColor Cyan
+    if (-not (Test-Path $TargetDir)) {
+        if (-not $DryRun) { New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null }
+    }
+
+    $mainScript = Join-Path $TargetDir "mcp-server-full.mjs"
+    $pkgJson = Join-Path $TargetDir "package.json"
+    if ((Test-Path $mainScript) -and (Test-Path $pkgJson)) {
+        Write-Host "  -> CloakBrowser da ton tai day du file ma nguon. Giu nguyen du lieu & profile cu (khong ghi de)." -ForegroundColor Green
+    } else {
+        Write-Host "  -> Copy ma nguon CloakBrowser sang $TargetDir..." -ForegroundColor Green
+        if (-not $DryRun -and (Test-Path $SourceDir)) {
+            Copy-Item -Path "$SourceDir\*" -Destination $TargetDir -Recurse -Force
+        }
+    }
+
+    $nodeModules = Join-Path $TargetDir "node_modules"
+    if (-not $SkipInstall -and -not (Test-Path $nodeModules)) {
+        Write-Host "  -> Dang chay 'npm install' cho CloakBrowser..." -ForegroundColor Cyan
+        if (-not $DryRun) {
+            Push-Location $TargetDir
+            try { npm install --omit=dev --silent } catch { Write-Warning "npm install cho CloakBrowser gap loi: $($_.Exception.Message)" } finally { Pop-Location }
+        }
+    }
+    return $mainScript
+}
 
 Write-Host "==> Preparing configuration file..." -ForegroundColor Cyan
 Write-Host ""
@@ -352,6 +436,11 @@ if (-not [string]::IsNullOrWhiteSpace($context7ApiKey)) {
 "@
 }
 
+$cbSourceDir = Join-Path $PSScriptRoot "mcp-servers\cloakbrowser"
+$cbTargetDir = Get-CloakBrowserInstallDir
+$cloakScriptPath = Setup-CloakBrowser -TargetDir $cbTargetDir -SourceDir $cbSourceDir -DryRun:$DryRun -SkipInstall:$SkipInstall
+$escapedCloakScript = ($cloakScriptPath).Replace('\', '\\')
+
 $cordisYaml = $cordisTemplate
 $cordisYaml = $cordisYaml.Replace("__AI_BASE_URL__", $aiBaseUrl)
 $cordisYaml = $cordisYaml.Replace("__JIRA_URL__", $jiraUrl)
@@ -360,7 +449,7 @@ $cordisYaml = $cordisYaml.Replace("__CONFLUENCE_URL__", $confUrl)
 $cordisYaml = $cordisYaml.Replace("__CONFLUENCE_PERSONAL_TOKEN__", $confToken)
 $cordisYaml = $cordisYaml.Replace("__GITNEXUS_CONFIG__", $gitnexusConfig.TrimEnd())
 $cordisYaml = $cordisYaml.Replace("__CONTEXT7_CONFIG__", $context7Config.TrimEnd())
-
+$cordisYaml = $cordisYaml.Replace("__CLOAKBROWSER_SCRIPT__", $escapedCloakScript)
 $targetPath = Join-Path $DshProfileDir "cordis.patch.yml"
 if (Test-Path $targetPath) {
     Write-Host "  -> Skipping $targetPath (already exists)" -ForegroundColor Yellow

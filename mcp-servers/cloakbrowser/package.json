@@ -1,0 +1,12 @@
+{
+  "name": "cloakbrowser-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for CloakBrowser stealth automation",
+  "type": "module",
+  "main": "mcp-server-full.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "cloakbrowser": "^0.5.7",
+    "playwright-core": "^1.60.0"
+  }
+}

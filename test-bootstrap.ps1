@@ -53,8 +53,8 @@ try {
         throw "ASSERTION FAILED: cordis.patch.yml is missing one or more MCP servers"
     }
 
-    if ($yamlRaw.Contains("serverName: cloakbrowser") -or $yamlRaw.Contains("mcp-cloakbrowser")) {
-        throw "ASSERTION FAILED: cordis.patch.yml should not contain cloakbrowser"
+    if (-not $yamlRaw.Contains("serverName: cloakbrowser") -or -not $yamlRaw.Contains("mcp-cloakbrowser")) {
+        throw "ASSERTION FAILED: cordis.patch.yml should contain cloakbrowser"
     }
     
     if (-not $yamlRaw.Contains("model: claude-sonnet-5")) {
