@@ -377,21 +377,9 @@ if (Test-Path $sourceAgents) {
 $sourceSkillsDir = Join-Path $PSScriptRoot "skills"
 $targetSkillsDir = Join-Path $DshHome "skills"
 if (Test-Path $sourceSkillsDir) {
-    if (-not $DryRun -and -not (Test-Path $targetSkillsDir)) {
-        New-Item -ItemType Directory -Force -Path $targetSkillsDir | Out-Null
-    }
-    
-    $skillItems = Get-ChildItem -Path $sourceSkillsDir
-    foreach ($item in $skillItems) {
-        $targetItem = Join-Path $targetSkillsDir $item.Name
-        if (Test-Path $targetItem) {
-            Write-Host "  -> Skipping skill $($item.Name) (already exists)" -ForegroundColor Yellow
-        } else {
-            Write-Host "  -> Copying skill $($item.Name)" -ForegroundColor Green
-            if (-not $DryRun) {
-                Copy-Item -Path $item.FullName -Destination $targetItem -Recurse -Force
-            }
-        }
+    Write-Host "  -> Copying skills/ to $targetSkillsDir (overwrite)" -ForegroundColor Green
+    if (-not $DryRun) {
+        Copy-Item -Path $sourceSkillsDir -Destination $targetSkillsDir -Recurse -Force
     }
 }
 
