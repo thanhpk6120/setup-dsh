@@ -110,6 +110,21 @@ if (-not $SkipInstall -and -not (Get-Command "uv" -ErrorAction SilentlyContinue)
         }
     }
 }
+if (-not $SkipInstall) {
+    Write-Host "==> Installing/updating mcp-atlassian globally via uv tool..." -ForegroundColor Cyan
+    if (-not $DryRun) {
+        if (Get-Command "uv" -ErrorAction SilentlyContinue) {
+            try {
+                uv tool install mcp-atlassian==0.23.1 --upgrade
+            } catch {
+                Write-Warning "Failed to install mcp-atlassian via uv: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Warning "'uv' is not available. Please install 'mcp-atlassian' manually: uv tool install mcp-atlassian==0.23.1"
+        }
+    }
+}
+
 
 if (-not $SkipInstall -and -not (Get-Command "memorix" -ErrorAction SilentlyContinue)) {
     Write-Host "==> Installing memorix globally..." -ForegroundColor Cyan
@@ -364,14 +379,10 @@ if (-not $DryRun -and -not (Test-Path $DshHome)) {
 $sourceAgents = Join-Path $PSScriptRoot "AGENTS.md"
 $targetAgents = Join-Path $DshHome "AGENTS.md"
 if (Test-Path $sourceAgents) {
-    if (Test-Path $targetAgents) {
-        Write-Host "  -> Skipping $targetAgents (already exists)" -ForegroundColor Yellow
-    } else {
-        Write-Host "  -> Copying $targetAgents" -ForegroundColor Green
+        Write-Host "  -> Copying $targetAgents (overwrite)" -ForegroundColor Green
         if (-not $DryRun) {
             Copy-Item -Path $sourceAgents -Destination $targetAgents -Force
         }
-    }
 }
 
 $sourceSkillsDir = Join-Path $PSScriptRoot "skills"
