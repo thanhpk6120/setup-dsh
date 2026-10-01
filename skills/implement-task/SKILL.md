@@ -52,6 +52,9 @@ The rule references these by name. Each `{{key}}` used in this file resolves fro
 
 > **Multi-Agent Orchestration Contract:** Phiên chính đóng vai trò Dispatcher/Control. Sau khi Gate 1 duyệt, bắt buộc sử dụng tool `task` gọi agent `dely-implementer` (một hoặc nhiều slice song song) để thực hiện code thay vì tự code trong main agent. Xong code, gọi `dely-reviewer` kiểm tra độc lập.
 
+> **MANDATORY EVIDENCE LOOP CONTRACT:**
+> Mọi task thực thi BẮT BUỘC tuân thủ nghiêm ngặt vòng lặp kiểm chứng (Evidence Loop) trước khi hoàn thành:
+> **Task execution** → Xuất file bằng chứng (`screenshot`/`json`/`txt`/`md`) → Lưu vào `docs/features/<TICKET-ID>/evidence/` → Tự verify đối chiếu với Acceptance Criteria → Sửa mã nguồn + cập nhật evidence + verify lại đến khi đạt mới được đánh dấu `done`.
 ## 1. When to run
 
 - `plan.md` has passed Gate 1 (`status: approved`) and `tasks.md` is ready.
@@ -93,6 +96,7 @@ STOP and ask the user if any of these is true:
 | Code changes | Only inside the locked repo(s), only within approved scope |
 | `docs/features/<TICKET-ID>/tasks.md` | Kept current, task by task, as work progresses |
 | `docs/features/<TICKET-ID>/report.md` | Real changed files, real verification output, real problems |
+| `docs/features/<TICKET-ID>/evidence/` | Real verification evidence (screenshot, json, txt, md) confirming acceptance criteria |
 | `docs/features/<TICKET-ID>/impact.md` | Finalized to the real blast radius — **if the project uses it** (`{{EXTRA_RULES}}`) |
 | `docs/features/<TICKET-ID>/deploy.md` | Only when a trigger in `{{DEPLOY_TRIGGERS}}` fires |
 | Proposed docs diff | For Gate 2, per `{{DOCS_UPDATE_MAP}}` |
@@ -158,8 +162,8 @@ Loop over the tasks in `tasks.md` in order. For each task:
 2. Change files in the order given by `{{IMPLEMENT_ORDER}}` for that stack.
 3. Follow `{{CODE_STYLE_RULES}}` — match the surrounding code, do not introduce a new pattern.
 4. Respect the scope discipline in §5 of this rule.
-5. Run the task's own verification command from `{{VERIFY_COMMANDS}}` (Step 8).
-6. Mark the task done **only** when its DoD in `tasks.md` is objectively met, and record the date.
+5. Run the task's own verification command from `{{VERIFY_COMMANDS}}` and execute the **Mandatory Evidence Loop** (Step 8.1): run commands/tests, capture real output/artifacts into `docs/features/<TICKET-ID>/evidence/`, and self-verify against acceptance criteria. Iterate until 100% satisfied.
+6. Mark the task done **only** when its DoD in `tasks.md` is objectively met, evidence is stored, and verifiable.
 7. Record the commit/PR reference against the task if `{{COMMIT_RULE}}` requires it.
 
 Special handling:
@@ -181,7 +185,25 @@ If reality does not match the approved plan — a file that does not exist, a co
 
 Never silently "fix" the plan by writing different code from what was approved.
 
-### Step 8 — Verify with real output
+### Step 8 — Verify with real output & Mandatory Evidence Loop
+
+#### Step 8.1 — Mandatory Evidence Loop (Bắt buộc theo từng task)
+
+Đối với mỗi task thực thi, BẮT BUỘC thực hiện đúng và đủ quy trình khép kín sau:
+1. **Task Execution:** Triển khai mã nguồn/kịch bản tương ứng với task.
+2. **Collect Evidence:** Thu thập bằng chứng thực tế dạng:
+   - `screenshot` (`.png`/`.jpg`): Bắt buộc cho UI/UX hoặc kết quả trực quan.
+   - `json` / `txt`: Output thực tế từ API response, log terminal, command output.
+   - `md`: Ghi chú hoặc kịch bản chi tiết.
+3. **Store Evidence:** Lưu toàn bộ file bằng chứng vào thư mục `docs/features/<TICKET-ID>/evidence/` (ví dụ: `docs/features/<TICKET-ID>/evidence/<task-id>-result.json`, `docs/features/<TICKET-ID>/evidence/<task-id>-screenshot.png`).
+4. **Self-Verify vs Acceptance Criteria:** Tự đối chiếu, kiểm tra kỹ lưỡng bằng chứng thu được với từng tiêu chí chấp nhận (Acceptance Criteria) trong `expect.md` và DoD trong `tasks.md`.
+5. **Iterate until Done:** Nếu chưa đạt tiêu chí hoặc phát sinh lỗi/lệch:
+   - Sửa lại code/fix bug.
+   - Chạy lại và cập nhật đè file bằng chứng mới vào `docs/features/<TICKET-ID>/evidence/`.
+   - Tự verify lại.
+   - Chỉ được đánh dấu task `done` khi và chỉ khi bằng chứng xác nhận thỏa mãn 100% acceptance criteria.
+
+#### Step 8.2 — Verify with real commands output
 
 1. Run the exact commands from `{{VERIFY_COMMANDS}}` for every service touched.
 2. Run the broader checks required by `{{REPORT_EVIDENCE}}` (build, test suite, lint, regression flows).
@@ -327,6 +349,8 @@ Rules:
 
 Per-task close-out:
 - [ ] The task's DoD in `tasks.md` is objectively met.
+- [ ] Mandatory Evidence Loop hoàn thành: Bằng chứng (screenshot/json/txt/md) đã được lưu đầy đủ vào `docs/features/<TICKET-ID>/evidence/`.
+- [ ] Tự verify đối chiếu đạt 100% Acceptance Criteria so với `expect.md` và `tasks.md`.
 - [ ] Its verification command was run and the real output is in `report.md`.
 - [ ] `tasks.md` status updated, with the date.
 - [ ] Commit/PR reference recorded if `{{COMMIT_RULE}}` requires it.
@@ -369,6 +393,7 @@ The work is sent back if any of these is present:
 | Anti-pattern | Why it fails |
 |---|---|
 | `report.md` claims "tests pass" with no pasted output | Unverifiable; the report is the evidence |
+| Thiếu bằng chứng hoặc bỏ qua Mandatory Evidence Loop | Không có file bằng chứng trong `docs/features/<TICKET-ID>/evidence/` đối chiếu với Acceptance Criteria |
 | Code written before Gate 1 approval | The gate exists to prevent exactly this |
 | The service was found by grep instead of the registry | Wrong repo edited; registry exists to prevent it |
 | The diff contains unrelated refactoring | Reviewer cannot separate the feature from the noise |

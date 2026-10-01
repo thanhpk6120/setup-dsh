@@ -5,18 +5,17 @@
 > **QUY TẮC TIÊN QUYẾT Ở ĐẦU (MANDATORY PREREQUISITE):** TẤT CẢ các lệnh xoá file/thư mục BẮT BUỘC phải dùng cách di chuyển nó vào thùng rác (Trash / Recycle Bin), TUYỆT ĐỐI KHÔNG ĐƯỢC xoá luôn/xóa vĩnh viễn.
 
 ## 0. PRECEDENCE, DELEGATION, SKILLS & PLUGINS/MCP [MANDATORY PRE-FLIGHT — NEVER SKIP]
+
+**[CRITICAL INVARIANT]** You MUST explicitly analyze the incoming request upfront to determine task complexity, applicable Skills, and applicable Plugins/MCP tools. Decide whether to spawn specialized subagents or use the main agent directly. You CANNOT skip this step. 
 - **PRECEDENCE RULE:** Delegation, Skill, and Plugin/MCP Orchestration rules ALWAYS OVERRIDE "Think Before Coding", "Simplicity", and "Goal-Driven". Whenever a task involves ≥2 steps, multi-file scope, or investigation, delegation is MANDATORY. "Simplicity" and "Goal-Driven" apply *within* the subagent's scope, NOT as an excuse for the Main Agent to do everything directly.
 - **OUTPUT PREFIX (MANDATORY BEFORE ANY TOOL CALL):** 
   The Main Agent MUST output a reasoning line before calling ANY tool:
   `[Pre-flight] Tier: 1/2/3 | Skills: <Skill name(s) or None> | Plugins/MCP: <Plugin/MCP tool(s) or None> | Rationale: <reason> | Action: <Direct / Single Subagent / Parallel Subagents>`
+
+### Mandatory Tool & Skill Resolution:
 - **Mandatory Skills Resolution:** Scan and apply matching skills from `skills/*/SKILL.md` (e.g. `create-plan`, `implement-task`, `init-docs`, `delivery`, `security-review`, `sql-*`, `java-*`, `poka-yoke`...). Never invent ad-hoc procedures when an established skill exists.
-- **Mandatory Plugins / MCP Tools Resolution:** Route domain-specific requests to specialized MCP tools instead of manual CLI/bash/grep:
-  - Code knowledge graph, call graphs, impact analysis, blast radius, symbol traces: MUST use **GitNexus** (`mcp__gitnexus_*`).
-  - Project memory, context briefs, decisions, historical bugfixes: MUST use **Memorix** (`mcp__memorix_*`).
-  - Headless browser automation, scraping, web interaction: MUST use **CloakBrowser** (`mcp__cloakbrowser_*`).
-  - Jira tickets, issues, sprints, worklogs: MUST use **Jira** (`mcp__company_atlassian_jira_*`).
-  - Confluence docs, specs, knowledge base: MUST use **Confluence** (`mcp__company_atlassian_confluence_*`).
-  - External library documentation & code examples: MUST use **Context7** (`mcp__context7_*`).
+- **Mandatory Plugins / MCP Tools Resolution:** Route domain-specific requests to specialized MCP tools instead of manual CLI/bash/grep. Luôn kiểm tra danh sách MCP tools đang có trong môi trường để ưu tiên sử dụng đúng công cụ cho domain (ví dụ: công cụ cho code graph/symbol, project memory, browser automation, issue tracking, docs, tra cứu thư viện...). *NEVER use generic `bash`/`grep`/`curl` if a dedicated Plugin/MCP handles the domain.*
+
 - **Delegation logic:**
   - Prefer delegating to specialized subagents (`scout`, `task`, `reviewer`, `docs-*`, `dely-*`) in parallel batches via the `task` tool whenever work has 2+ steps, multi-file scope, or distinct inspection/implementation slices.
   - Do not sequentially inspect > 1 file or serialize independent tasks in the main agent. Fan out concurrently to minimize latency, ensure accuracy, and save main context window.
@@ -50,13 +49,7 @@
 
 ### Mandatory Tool & Skill Resolution:
 - **Skills (`skills/*/SKILL.md`):** E.g. `create-plan`, `implement-task`, `init-docs`, `delivery`, `security-review`. If a task matches a skill's intent, MUST use it instead of ad-hoc steps.
-- **Plugins / MCP Tools:** 
-  - **GitNexus**: Code graphs, symbol context, impact analysis, blast radius.
-  - **Memorix**: Memory briefs, durable facts, decision records.
-  - **CloakBrowser**: Web scraping, browser automation.
-  - **Jira / Confluence**: Atlassian ticket/docs interaction.
-  - **Context7**: External library docs.
-  *NEVER use generic `bash`/`grep` if a dedicated Plugin/MCP handles the domain.*
+- **Plugins / MCP Tools:** Luôn kiểm tra danh sách MCP tools đang có trong môi trường để ưu tiên sử dụng đúng công cụ cho domain (ví dụ: công cụ cho code graph/symbol, project memory, browser automation, issue tracking, docs, tra cứu thư viện...). *NEVER use generic `bash`/`grep`/`curl` if a dedicated Plugin/MCP handles the domain.*
 
 Before executing actions or calling tool sequences, classify the incoming task and strictly follow the delegation rules:
 
