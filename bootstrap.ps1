@@ -293,6 +293,15 @@ __GITNEXUS_CONFIG__
     serverName: context7
     transport: stdio
 __CONTEXT7_CONFIG__
+- id: mcp-glab
+  name: "@deepseek-ai/dsh-mcp-client"
+  config:
+    serverName: glab
+    transport: stdio
+    command: glab
+    args:
+      - mcp
+      - serve
 - id: mcp-cloakbrowser
   name: "@deepseek-ai/dsh-mcp-client"
   config:
