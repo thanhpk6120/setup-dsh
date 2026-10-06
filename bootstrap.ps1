@@ -154,6 +154,24 @@ if (-not $SkipInstall) {
         }
     }
 }
+if (-not $SkipInstall -and -not (Get-Command "glab" -ErrorAction SilentlyContinue)) {
+    Write-Host "==> Installing glab (GitLab CLI) globally..." -ForegroundColor Cyan
+    if (-not $DryRun) {
+        if (Get-Command "winget" -ErrorAction SilentlyContinue) {
+            try {
+                winget install -e --id GLab.GLab --silent --accept-source-agreements --accept-package-agreements | Out-Null
+                $glabProg = "$env:LOCALAPPDATA\Programs\glab"
+                if (Test-Path $glabProg) {
+                    $env:Path = "$glabProg;$env:Path"
+                }
+            } catch {
+                Write-Warning "Failed to install glab via winget: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Warning "'winget' is not available. Please install glab manually."
+        }
+    }
+}
 
 Write-Host "==> Ensuring directory $DshProfileDir exists..." -ForegroundColor Cyan
 if (-not $DryRun) {
@@ -398,6 +416,22 @@ $jiraToken = Get-EnvOrPrompt -EnvName "JIRA_PERSONAL_TOKEN" -PromptMessage "Jira
 $confUrl = Get-EnvOrPrompt -EnvName "CONFLUENCE_URL" -PromptMessage "Confluence URL" -DefaultValue "https://conf.cybertech.vn"
 $confToken = Get-EnvOrPrompt -EnvName "CONFLUENCE_PERSONAL_TOKEN" -PromptMessage "Confluence Personal Token" -DefaultValue "YOUR_CONFLUENCE_PERSONAL_TOKEN"
 $context7ApiKey = Get-EnvOrPrompt -EnvName "CONTEXT7_API_KEY" -PromptMessage "Context7 API Key" -AllowEmpty
+$gitlabHost = Get-EnvOrPrompt -EnvName "GITLAB_HOST" -PromptMessage "GitLab Host" -DefaultValue "10.30.1.17"
+$gitlabToken = Get-EnvOrPrompt -EnvName "GITLAB_TOKEN" -PromptMessage "GitLab Personal Token" -AllowEmpty
+
+if (-not [string]::IsNullOrWhiteSpace($gitlabToken) -and -not $DryRun) {
+    Write-Host "==> Configuring GitLab authentication for host '$gitlabHost'..." -ForegroundColor Cyan
+    $proto = if ($gitlabHost -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' -or $gitlabHost -match ':80') { "http" } else { "https" }
+    $glabCmd = if (Get-Command "glab" -ErrorAction SilentlyContinue) { "glab" } elseif (Test-Path "$env:LOCALAPPDATA\Programs\glab\glab.exe") { "$env:LOCALAPPDATA\Programs\glab\glab.exe" } else { "glab" }
+    try {
+        & $glabCmd config set api_protocol $proto -g --host $gitlabHost 2>$null
+        $tokenSec = $gitlabToken.Trim()
+        & $glabCmd auth login --hostname $gitlabHost --token $tokenSec 2>$null
+        Write-Host "  -> Logged in to GitLab ($gitlabHost) successfully." -ForegroundColor Green
+    } catch {
+        Write-Warning "Could not configure glab auth automatically: $($_.Exception.Message)"
+    }
+}
 
 # Dynamic path resolution: gitnexus
 $gitnexusConfig = ""
