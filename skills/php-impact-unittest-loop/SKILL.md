@@ -7,63 +7,53 @@ description: 'Phân tích vùng ảnh hưởng, tự động tạo test case PHP
 
 Sử dụng skill này sau khi đã hoàn tất thay đổi mã nguồn PHP và người dùng yêu cầu kiểm tra lại (retest), đánh giá ảnh hưởng (impact), hoặc nâng cao độ phủ (coverage).
 
-**Lưu ý giới hạn của PHPUnit**: PHPUnit không có bộ lọc (filter) tích hợp sẵn để chỉ chạy hoặc báo cáo coverage cho các hàm vừa bị thay đổi. Việc lấy coverage yêu cầu cài đặt extension `Xdebug` (với `XDEBUG_MODE=coverage`) hoặc `pcov`.
-
 ## 1. Phân tích vùng ảnh hưởng (Impact)
 
-Sử dụng `git status` hoặc `git diff -U0` để phân loại các file mã nguồn đã thay đổi và map chính xác thay đổi tới các function/method cụ thể trong PHP.
-Nếu không có công cụ tự động, phân tích thủ công theo thứ tự đọc các lớp (Layer): `Controller -> Service -> Repository -> Model`.
-Lập bảng đánh giá mức độ ảnh hưởng: File / Hàm / API tương ứng / Mức độ rủi ro (HIGH/MED/LOW).
+Sử dụng `git status` và `git diff -U0` để phân loại các file mã nguồn và các dòng mã (lines) đã thay đổi.
+So khớp các thay đổi từ git diff với cấu trúc file PHP để xác định chính xác Class và Method bị sửa đổi.
+Lập bảng đánh giá mức độ ảnh hưởng: File / Hàm (Method) / API tương ứng / Mức độ rủi ro (HIGH/MED/LOW).
 
 ## 2. Xác định mục tiêu cần kiểm tra (Target)
 
 Chỉ định các hàm, API cụ thể cần viết test dựa trên quy tắc sau:
-- Bao gồm các hàm bị thay đổi trực tiếp (map từ `git diff`).
+- Bao gồm các hàm/method bị thay đổi trực tiếp (xác định từ bước 1).
 - Bao gồm các hàm gọi đến (callers) hoặc được gọi từ (callees) hàm thay đổi với khoảng cách 1 hop.
-- Bao gồm các API handler liên quan trực tiếp đến luồng logic thay đổi.
-- Loại trừ các đoạn mã được sinh tự động (generated code) hoặc các lớp cấu hình hệ thống (config).
+- Bao gồm các API/Controller handler liên quan trực tiếp đến luồng logic thay đổi.
+- Loại trừ các đoạn mã sinh tự động, boilerplate framework, hoặc file migration/config.
 
 ## 3. Tạo bài kiểm tra (Tạo test)
 
 Viết các bài kiểm tra bằng PHPUnit.
-Đặt file test tại thư mục `tests` với cấu trúc thư mục phản chiếu chính xác thư mục `src` (hoặc thư mục mã nguồn chính). Tên file test phải có hậu tố `Test`.
-Giả lập (mock) các đường ranh giới hệ thống (Database, HTTP client) bằng `createMock()` hoặc `MockBuilder`.
-Mỗi nhánh logic (branch) bị thay đổi phải có ít nhất một test case tương ứng:
+Đặt file test tại thư mục `tests/` (ví dụ `tests/Unit/` hoặc `tests/Feature/`) phản chiếu cấu trúc thư mục mã nguồn (`src/` hoặc `app/`). Tên file test phải có hậu tố `Test.php`.
+Giả lập các phụ thuộc bên ngoài bằng `createMock()` hoặc `createStub()` của PHPUnit (hoặc Mockery nếu dự án yêu cầu).
+Mỗi nhánh logic (branch/if-else) bị thay đổi phải có test case bao phủ:
 - Đường dẫn chuẩn (happy path)
-- Giá trị null
-- Dữ liệu trống (empty)
-- Bắn lỗi (exception)
-- Quyền truy cập (permission)
+- Giá trị null hoặc không hợp lệ
+- Bắn lỗi (Exception)
+- Boundary values (giá trị biên)
 
 ## 4. Chạy kiểm tra chọn lọc (Chạy selective)
 
-Thực thi test riêng lẻ trên các file vừa tạo hoặc thay đổi, **cấm** chạy toàn bộ test suite trừ khi vùng ảnh hưởng lan rộng toàn hệ thống (phải hỏi ý kiến người dùng để confirm nếu định chạy full suite). Bắt buộc phải có cờ `--filter`. Nếu quên, dừng lại và hỏi người dùng.
-Sử dụng format xuất báo cáo mặc định: `--coverage-html` và `--coverage-clover`.
-
-Lệnh chạy ví dụ:
-```bash
-XDEBUG_MODE=coverage vendor/bin/phpunit --filter TênTestClass --coverage-html coverage-report/ --coverage-clover coverage.xml
-```
-Sau khi tạo báo cáo, mở thư mục HTML tương tác cho người dùng (ví dụ dùng lệnh `start coverage-report/index.html` hoặc tương đương tùy OS).
+Chỉ chạy test cho các Class/Method bị ảnh hưởng bằng cờ `--filter`. Tránh chạy toàn bộ test suite.
+Bật extension thu thập coverage (Xdebug hoặc PCOV) để lấy kết quả đo lường.
+- Sử dụng PCOV: `php -d pcov.enabled=1 vendor/bin/phpunit --filter "TestClassName" --coverage-clover clover.xml --coverage-html coverage/`
+- Sử dụng Xdebug: `XDEBUG_MODE=coverage vendor/bin/phpunit --filter "TestClassName" --coverage-clover clover.xml --coverage-html coverage/`
 
 ## 5. Vòng lặp cải thiện độ phủ (Loop-until-90)
 
-Đọc file báo cáo `coverage.xml` (chuẩn Clover).
-Chỉ lọc và phân tích số đếm (statements, methods, elements) đối với các file và method cụ thể đã bị ảnh hưởng hoặc nằm trong target.
-Tính toán tỷ lệ phần trăm: `(covered elements / total elements) * 100`.
-Điều kiện đạt: Tỷ lệ lớn hơn 90% cho phần mã bị ảnh hưởng.
-Nếu chưa đạt, chỉ sửa và bổ sung test case, sau đó chạy lại lệnh test có coverage.
-Sau mỗi vòng lặp, đóng gói bằng chứng (evidence) vào file nén: nén thư mục `coverage-report/`, file `coverage.xml` và file log lỗi/output vào file `evidence/php-loop-<vong>.zip`.
-Giới hạn tối đa 5 vòng lặp. Ở mỗi vòng, ghi nhật ký: Số thứ tự vòng lặp / Tỷ lệ coverage còn thiếu / Các nhánh chưa được phủ.
+Đọc file báo cáo `clover.xml`. Tìm các thẻ `<file>` và `<class>`, `<line>` hoặc `<metrics>` tương ứng với file/hàm đã sửa.
+Đánh giá tỷ lệ phần trăm Statements (dòng lệnh) và Methods. Phép tính: `(coveredstatements / statements) * 100`.
+Điều kiện đạt: Tỷ lệ Statements (Line coverage) và Branch/Path coverage (nếu có) lớn hơn 90%.
+Nếu chưa đạt 90%, bổ sung test case cho các trường hợp còn thiếu (dòng code không được hit), sau đó chạy lại lệnh PHPUnit với `--filter` và `--coverage-clover`.
+Giới hạn tối đa 5 vòng lặp. Ở mỗi vòng, ghi log: Số thứ tự vòng / % coverage còn thiếu / Dòng (Lines) cụ thể chưa được phủ.
 
 ## 6. Dừng và xin ý kiến (Stop-and-ask)
 
-Dừng vòng lặp và hỏi người dùng nếu thỏa mãn một trong các điều kiện dừng thật:
-- Phát hiện lỗi logic nghiệp vụ nghiêm trọng có thể ảnh hưởng production.
-- Mã nguồn không thể viết test (untestable code) do thiết kế (statics, deps lằng nhằng).
-- Coverage không tăng trong 2 vòng lặp liên tiếp.
-- Thiếu cờ `--filter` hoặc tính chạy full suite.
-Khi dừng, trình bày rõ câu hỏi cùng với bằng chứng cụ thể từ logs hoặc code.
+Dừng vòng lặp và hỏi người dùng nếu gặp một trong các điều kiện:
+- Phát hiện lỗi logic nghiệp vụ làm hỏng ứng dụng.
+- Mã nguồn cũ quá phức tạp hoặc có dependency ngầm (hidden dependencies) khiến việc mock thất bại (untestable code).
+- Coverage không cải thiện sau 2 vòng lặp liên tiếp.
+Khi dừng, trình bày rõ nguyên nhân kèm theo thông báo lỗi từ PHPUnit hoặc đoạn mã gây tắc nghẽn.
 
 ## Output
 
@@ -71,26 +61,26 @@ Khi dừng, trình bày rõ câu hỏi cùng với bằng chứng cụ thể t�
 # PHP Impact Test Loop Result
 
 ## Bảng phân tích ảnh hưởng (Impact table)
-| File | Hàm | API | Mức độ rủi ro (HIGH/MED/LOW) |
-|------|-----|-----|------------------------------|
+| File | Hàm (Method) | API | Mức độ rủi ro (HIGH/MED/LOW) |
+|------|--------------|-----|------------------------------|
 
 ## Danh sách cần kiểm tra (Retest list)
-- Class.method1 (Lý do chọn)
-- Class.method2 (Lý do chọn)
+- ClassName::method1 (Lý do chọn)
+- ClassName::method2 (Lý do chọn)
 
-## Kết quả PHPUnit (Coverage result)
+## Kết quả Clover (Coverage result)
 - Statements: X%
 - Methods: Y%
-- Elements: Z%
+- Tình trạng: ĐẠT/CHƯA ĐẠT (Ngưỡng 90%)
 
 ## Nhật ký vòng lặp
-- Vòng 1: Đạt X% elements. Thiếu: Nhánh kiểm tra null. Evidence: `evidence/php-loop-1.zip`
-- Vòng 2: Đạt Y% elements. Thiếu: Nhánh kiểm tra ngoại lệ. Evidence: `evidence/php-loop-2.zip`
+- Vòng 1: Đạt X% Statements. Thiếu: Nhánh if ở dòng 45.
+- Vòng 2: Đạt Y% Statements. Thiếu: Bắt Exception ở dòng 60.
 ```
 
 ## Safety boundaries
 
-- Không chỉnh sửa mã nguồn chính (thư mục `src`/`app`) trong quá trình chạy test loop chỉ để dễ test.
-- Không hạ thấp ngưỡng coverage yêu cầu (90%).
-- Không xóa các test case cũ chỉ để làm tăng tỷ lệ coverage ảo.
-- Không tự ý commit hoặc push mã nguồn khi chưa có yêu cầu từ người dùng.
+- Không tự ý sửa đổi code gốc trong `src/` hoặc `app/` chỉ để bypass test (trừ khi được user đồng ý fix bug).
+- Không sửa file cấu hình `phpunit.xml` làm giảm tiêu chuẩn coverage của dự án.
+- Giữ nguyên cấu trúc thư mục, chỉ thêm file vào thư mục `tests/`.
+- Không tự ý commit/push mã nguồn.

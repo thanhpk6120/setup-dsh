@@ -1,99 +1,158 @@
-# PHPUnit Commands and References
+# PHP Impact Unittest Loop - Commands
 
-## 1. Tìm hàm thay đổi (Mapping `git diff`)
+Tài liệu lệnh chạy được cho skill `php-impact-unittest-loop`. Copy-paste trực tiếp vào terminal tại thư mục gốc dự án.
 
-Xem những file nào thay đổi:
+## 1. Xác định file và hàm đổi (git diff)
+
 ```bash
-git status
-# hoặc
-git diff --name-only
+git status --short
+git diff --name-only HEAD
+git diff -U0 HEAD -- '*.php'
 ```
 
-Lấy danh sách các thay đổi chính xác đến từng dòng mã mà không bị dính context (để map ra function/method PHP tương ứng bị đổi):
+Lọc riêng file nguồn, bỏ qua test cũ:
+
 ```bash
-git diff -U0
+git diff --name-only HEAD -- 'src/*.php' 'app/*.php'
 ```
 
-## 2. Chạy test và tạo Coverage Report (Chạy Selective)
+Xem method chứa dòng đổi (ví dụ kiểm tra file `src/Service/OrderService.php`):
 
-**Bắt buộc** phải sử dụng biến môi trường kích hoạt coverage (Xdebug hoặc PCOV) và cờ `--filter` để không chạy toàn bộ test suite.
-
-Chạy với **Xdebug**:
 ```bash
-XDEBUG_MODE=coverage vendor/bin/phpunit --filter TênTestClass --coverage-html coverage-report/ --coverage-clover coverage.xml
+git diff -U0 HEAD -- src/Service/OrderService.php
+grep -n "function " src/Service/OrderService.php
 ```
 
-Chạy với **PCOV** (nhanh hơn nếu được hỗ trợ):
+## 2. Kiểm tra môi trường coverage PHP
+
 ```bash
-php -d pcov.enabled=1 vendor/bin/phpunit --filter TênTestClass --coverage-html coverage-report/ --coverage-clover coverage.xml
+php -v
+php -m | grep -Ei "pcov|xdebug"
+vendor/bin/phpunit --version
 ```
 
-*File xuất ra sẽ gồm thư mục `coverage-report/` chứa HTML và file `coverage.xml` chuẩn Clover.*
+Nếu thiếu driver coverage, cài một trong hai:
 
-## 3. Cách đọc và tính Coverage từ coverage.xml
-
-File `coverage.xml` (Clover) chứa số lượng metrics cho toàn project, từng file và từng class.
-Ví dụ cấu trúc của một class trong file clover:
-```xml
-<class name="App\Services\UserService" namespace="App\Services">
-    <metrics complexity="5" methods="2" coveredmethods="1" statements="10" coveredstatements="8" elements="12" coveredelements="9"/>
-</class>
-```
-Công thức tính % độ phủ chung (elements): `(coveredelements / elements) * 100`
-
-**Lệnh PHP 1 dòng để tính % coverage của một class cụ thể (vd `App\Services\UserService`):**
 ```bash
-php -r "$xml = simplexml_load_file('coverage.xml'); $c = $xml->xpath('//class[@name=\"App\\\\Services\\\\UserService\"]/metrics'); if($c) { $m = $c[0]; $cov = (int)$m['coveredelements']; $tot = (int)$m['elements']; echo $tot > 0 ? sprintf('%.2f%% elements covered', ($cov/$tot)*100) : 'No elements'; } else { echo 'Class not found'; }"
+pecl install pcov
+php -d pcov.enabled=1 -m | grep pcov
 ```
-*(Lưu ý: Namespace `\` trong XPath cần được escape thành `\\\\` khi viết oneliner trên Bash).*
 
-## 4. Tương tác và Lưu bằng chứng (Evidence)
-
-Mở báo cáo HTML để xem dòng code nào chưa được phủ (tùy theo OS):
 ```bash
-# Windows
-start coverage-report/index.html
-
-# macOS
-open coverage-report/index.html
-
-# Linux
-xdg-open coverage-report/index.html
+php -m | grep xdebug
+XDEBUG_MODE=coverage php -v
 ```
 
-Nén toàn bộ bằng chứng (evidence) sau mỗi vòng lặp:
+## 3. Chạy PHPUnit chọn lọc theo filter
+
+Chạy 1 class test:
+
 ```bash
-mkdir -p evidence
-zip -r evidence/php-loop-1.zip coverage-report/ coverage.xml phpunit_output.log
+vendor/bin/phpunit --filter OrderServiceTest
 ```
 
-## 5. Pattern Mocking cơ bản
+Chạy 1 method test cụ thể:
 
-Tạo mock cơ bản với `createMock()`:
-```php
-$mock = $this->createMock(Dependency::class);
-$mock->method('someMethod')->willReturn('value');
+```bash
+vendor/bin/phpunit --filter "OrderServiceTest::testCalculateTotalReturnsCorrectValue"
 ```
 
-Dùng `MockBuilder` khi cần giữ nguyên constructor gốc hoặc chỉ mock vài method cụ thể:
-```php
-$mock = $this->getMockBuilder(Dependency::class)
-    ->onlyMethods(['methodToMock'])
-    ->disableOriginalConstructor()
-    ->getMock();
+Chạy nhiều class trong 1 thư mục:
+
+```bash
+vendor/bin/phpunit --filter "OrderServiceTest|PaymentServiceTest"
+vendor/bin/phpunit tests/Unit/Service/OrderServiceTest.php
 ```
 
-Sử dụng `expects` và `with` để verify hành vi:
-```php
-$mock->expects($this->once())
-     ->method('save')
-     ->with($this->equalTo('expected_value'))
-     ->willReturn(true);
+## 4. Chạy kèm coverage (clover + html)
+
+Dùng PCOV (nhanh, khuyên dùng local):
+
+```bash
+php -d pcov.enabled=1 vendor/bin/phpunit --filter OrderServiceTest --coverage-clover clover.xml --coverage-html coverage/
 ```
 
-## 6. Anti-patterns (Nghiêm cấm)
+Dùng Xdebug (khi không có PCOV):
 
-1. **Test implementation details**: Assert trực tiếp vào các thuộc tính private/protected. Hãy test bằng output/public APIs.
-2. **Over-mocking**: Nếu dependency chỉ là một class dữ liệu (Value Object, DTO) không có I/O hoặc logic phức tạp, hãy dùng object thật thay vì mock.
-3. **Che đậy việc thiếu test bằng cách loại trừ (exclude)**: Không bao giờ thêm các file bị ảnh hưởng thay đổi vào thẻ `<exclude>` trong `phpunit.xml` để tăng ảo độ phủ.
-4. **Bypass chạy selective**: Chạy toàn bộ test suite dự án khi thay đổi một module nhỏ mà chưa hỏi người dùng.
+```bash
+XDEBUG_MODE=coverage vendor/bin/phpunit --filter OrderServiceTest --coverage-clover clover.xml --coverage-html coverage/
+```
+
+Chạy full suite khi impact lan rộng (có xác nhận user):
+
+```bash
+php -d pcov.enabled=1 vendor/bin/phpunit --coverage-clover clover.xml --coverage-html coverage/
+```
+
+## 5. Đọc và lọc clover.xml theo method đổi
+
+Xem tổng quan metrics:
+
+```bash
+grep -o '<metrics[^>]*>' clover.xml | head -n 5
+```
+
+Lọc metrics của 1 file cụ thể:
+
+```bash
+grep -A2 'name=".*OrderService.php"' clover.xml
+php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[@name][contains(@name,\"OrderService.php\")]//metrics") as $m) { echo $m->asXML(), PHP_EOL; }'
+```
+
+Liệt kê dòng chưa cover (count=0) trong file đổi:
+
+```bash
+php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"OrderService.php\")]//line[@count=\"0\"]") as $l) { echo $l["num"], ":", $l["type"], PHP_EOL; }'
+```
+
+Tính phần trăm statements của 1 file:
+
+```bash
+php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"OrderService.php\")]//metrics") as $m) { $s=(int)$m["statements"]; $c=(int)$m["coveredstatements"]; printf("statements=%d covered=%d pct=%.1f%%\n", $s, $c, $s ? $c*100/$s : 100); }'
+```
+
+## 6. Mở báo cáo HTML để tương tác
+
+```bash
+ls coverage/index.html
+```
+
+Mở trên Windows (PowerShell):
+
+```powershell
+start coverage/index.html
+```
+
+Mở trên macOS / Linux:
+
+```bash
+open coverage/index.html
+xdg-open coverage/index.html
+```
+
+Serve thư mục coverage để xem qua browser:
+
+```bash
+php -S 127.0.0.1:8000 -t coverage/
+```
+
+## 7. Nén evidence thành ZIP mỗi vòng
+
+Đặt tên file theo vòng lặp (`loop1`, `loop2`):
+
+```bash
+zip -r evidence-loop1.zip clover.xml coverage/
+```
+
+Windows PowerShell (nếu không có lệnh zip):
+
+```powershell
+Compress-Archive -Path clover.xml,coverage -DestinationPath evidence-loop1.zip -Force
+```
+
+Kiểm tra file ZIP vừa tạo:
+
+```bash
+ls -lh evidence-loop*.zip
+unzip -l evidence-loop1.zip | head -n 20
+```

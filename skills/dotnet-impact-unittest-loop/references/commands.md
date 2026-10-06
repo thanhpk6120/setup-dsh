@@ -1,177 +1,202 @@
 # .NET Test & Coverage Commands Cheat Sheet
 
-## 1. Lệnh Git Diff xác định vùng thay đổi
+## 1. Map Git Diff tới Method C# thay đổi
 
-Xem danh sách file bị thay đổi:
+Xem các thay đổi kèm ngữ cảnh tên method C# trong hunk header:
 ```bash
-git status -s
-git diff --name-only
+# Hiển thị diff với ngữ cảnh hàm (function context)
+git diff -W src/
+
+# Hiển thị các khối thay đổi không kèm dòng context, hiển thị rõ tên method tại header @@
+git diff -U0 HEAD~1 -- "*.cs"
 ```
 
-Xem chi tiết dòng code và hàm bị thay đổi:
+Lấy danh sách các file C# vừa sửa:
 ```bash
-git diff -U0 HEAD~1
-# Hoặc so sánh với branch base
-git diff -U0 origin/main...HEAD -- "src/**/*.cs"
+git diff --name-only HEAD~1 -- "*.cs"
 ```
 
-## 2. Chạy test chọn lọc và thu thập Coverage
+---
 
-### Chạy test theo Class cụ thể
+## 2. Chạy Test chọn lọc (dotnet test --filter)
+
+Chạy tất cả test trong một Test Class:
 ```bash
-dotnet test --filter "FullyQualifiedName~Namespace.TestClass" --collect:"XPlat Code Coverage"
+dotnet test --filter "FullyQualifiedName~MyNamespace.Services.OrderServiceTests"
 ```
 
-### Chạy test theo Method cụ thể
+Chạy một test method cụ thể:
 ```bash
-dotnet test --filter "FullyQualifiedName=Namespace.TestClass.TestMethodName" --collect:"XPlat Code Coverage"
+dotnet test --filter "FullyQualifiedName=MyNamespace.Services.OrderServiceTests.CreateOrder_ValidInput_ReturnsSuccess"
 ```
 
-### Chạy toàn bộ test (Chỉ dùng khi cần thiết và đã có xác nhận của user)
+Chạy kết hợp nhiều class hoặc namespace:
 ```bash
-dotnet test --collect:"XPlat Code Coverage"
+dotnet test --filter "FullyQualifiedName~OrderServiceTests|FullyQualifiedName~PaymentServiceTests"
 ```
 
-Vị trí file kết quả coverage:
-- `TestResults/<guid>/coverage.cobertura.xml`
+---
 
-## 3. Sinh báo cáo HTML mặc định với ReportGenerator & Mở HTML
+## 3. Thu thập Coverage với Coverlet (XPlat Code Coverage)
 
-### Tạo báo cáo HTML và TextSummary
+Chạy test chọn lọc kèm cờ thu thập coverage (mặc định sinh `coverage.cobertura.xml`):
 ```bash
-reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" -targetdir:"coveragereport" -reporttypes:"Html;TextSummary"
+dotnet test --filter "FullyQualifiedName~OrderServiceTests" --collect "XPlat Code Coverage"
 ```
+File báo cáo được tạo tại: `[ProjectTestDir]/TestResults/{guid}/coverage.cobertura.xml`
 
-### Mở file index.html xem trực tiếp
-Trên Windows:
-```cmd
-start coveragereport/index.html
-```
-
-Trên macOS:
+Thiết lập Coverlet Threshold (90% Line & Branch):
 ```bash
-open coveragereport/index.html
+dotnet test --collect "XPlat Code Coverage" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Threshold=90 DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ThresholdType="line,branch"
 ```
 
-Trên Linux:
-```bash
-xdg-open coveragereport/index.html
+---
+
+## 4. Lọc coverage.cobertura.xml theo Method
+
+Cấu trúc block method trong file Cobertura do Coverlet sinh:
+```xml
+<class name="MyNamespace.Services.OrderService" ...>
+  <methods>
+    <method name="CreateOrderAsync" signature="(...)" line-rate="0.95" branch-rate="0.90">
+      <lines>
+        <line number="45" hits="3" branch="False"/>
+        <line number="48" hits="0" branch="True" condition-coverage="50% (1/2)"/>
+      </lines>
+    </method>
+  </methods>
+</class>
 ```
 
-## 4. Cách đọc và lọc Coverage từ coverage.cobertura.xml theo Method
-
-Do Coverlet và ReportGenerator không tự lọc changed-methods, sử dụng script dưới đây để trích xuất tỷ lệ Line & Branch coverage của một method cụ thể trong class.
-
-### Script Python trích xuất coverage theo Class và Method
-```bash
-python3 -c "import xml.etree.ElementTree as ET, glob, sys; files = glob.glob(sys.argv[1], recursive=True); root = ET.parse(files[0]).getroot() if files else None; method = root.find(f'.//class[@name=\"{sys.argv[2]}\"]//method[@name=\"{sys.argv[3]}\"]') if root else None; print(f'Method: {sys.argv[3]} | Line: {float(method.attrib.get(\"line-rate\", 0))*100:.2f}% | Branch: {float(method.attrib.get(\"branch-rate\", 0))*100:.2f}%' if method is not None else 'Method or Class not found')" "TestResults/**/coverage.cobertura.xml" "Namespace.TargetClass" "TargetMethod"
-```
-
-### Script PowerShell (dành cho môi trường Windows không có Python)
+### Lọc bằng PowerShell (Native trên Windows):
 ```powershell
-[xml]$xml = Get-Content (Get-ChildItem -Path "TestResults/**/coverage.cobertura.xml" | Select-Object -First 1).FullName; $m = $xml.SelectSingleNode("//class[@name='Namespace.TargetClass']//method[@name='TargetMethod']"); if ($m) { $line = [double]$m.'line-rate' * 100; $branch = [double]$m.'branch-rate' * 100; Write-Host "Method: TargetMethod | Line: $line% | Branch: $branch%" } else { Write-Host "Method or Class not found" }
+$xml = [xml](Get-Content (Get-ChildItem -Recurse -Filter "coverage.cobertura.xml" | Select -First 1).FullName)
+$method = $xml.SelectSingleNode("//class[@name='MyNamespace.Services.OrderService']/methods/method[@name='CreateOrderAsync']")
+if ($method) {
+    [PSCustomObject]@{
+        Method = $method.name
+        LineRate = "{0:P2}" -f [double]$method.'line-rate'
+        BranchRate = "{0:P2}" -f [double]$method.'branch-rate'
+    } | Format-Table
+} else {
+    Write-Host "Method not found"
+}
 ```
 
-## 5. Lệnh đóng gói Evidence (Bằng chứng từng vòng lặp)
-
-Tạo thư mục evidence nếu chưa có:
+### Lọc bằng Python (Cross-platform):
 ```bash
-mkdir -p evidence
+python -c "import xml.etree.ElementTree as ET, glob; f = glob.glob('**/coverage.cobertura.xml', recursive=True)[0]; root = ET.parse(f).getroot(); m = root.find('.//class[@name=\"MyNamespace.Services.OrderService\"]/methods/method[@name=\"CreateOrderAsync\"]'); print(f'Line: {float(m.attrib[\"line-rate\"])*100:.1f}%, Branch: {float(m.attrib[\"branch-rate\"])*100:.1f}%') if m is not None else print('Method not found')"
 ```
 
-Nén thư mục `TestResults`, `coveragereport`, và file `test.log`:
-- Trên Linux / macOS:
+---
+
+## 5. Tạo HTML Report trực quan (ReportGenerator)
+
+Cài đặt ReportGenerator global tool (nếu chưa có):
 ```bash
-zip -r evidence/dotnet-loop-1.zip TestResults coveragereport test.log
+dotnet tool install -g dotnet-reportgenerator-globaltool
 ```
-- Trên Windows PowerShell:
+
+Sinh HTML report từ file Cobertura:
+```bash
+reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coveragereport" -reporttypes:Html
+```
+
+---
+
+## 6. Mở HTML Report và Nén Zip
+
+### Mở HTML report trong trình duyệt:
 ```powershell
-Compress-Archive -Path TestResults, coveragereport, test.log -DestinationPath evidence/dotnet-loop-1.zip -Force
+# Trên Windows / PowerShell
+Start-Process "coveragereport\index.html"
+
+# Trên Linux/macOS
+xdg-open coveragereport/index.html || open coveragereport/index.html
 ```
 
-## 6. 5 Pattern xUnit & Moq tối thiểu
+### Nén thư mục report thành file ZIP:
+```powershell
+# PowerShell
+Compress-Archive -Path "coveragereport\*" -DestinationPath "coveragereport.zip" -Force
 
-### 1. Mock dependencies (Service / Repository)
+# Bash / Linux
+zip -r coveragereport.zip coveragereport/
+```
+
+---
+
+## 7. Mẫu xUnit & Moq / NSubstitute chuẩn
+
+### Mẫu Mock với Moq:
 ```csharp
-public class UserServiceTests
+public class OrderServiceTests
 {
-    private readonly Mock<IUserRepository> _userRepoMock;
-    private readonly UserService _sut;
+    private readonly Mock<IOrderRepository> _repoMock;
+    private readonly OrderService _sut; // System Under Test
 
-    public UserServiceTests()
+    public OrderServiceTests()
     {
-        _userRepoMock = new Mock<IUserRepository>();
-        _sut = new UserService(_userRepoMock.Object);
+        _repoMock = new Mock<IOrderRepository>();
+        _sut = new OrderService(_repoMock.Object);
+    }
+
+    [Fact]
+    public async Task CreateOrderAsync_ValidOrder_ReturnsId()
+    {
+        // Arrange
+        var order = new Order { Amount = 100 };
+        _repoMock.Setup(r => r.SaveAsync(It.IsAny<Order>())).ReturnsAsync(1);
+
+        // Act
+        var result = await _sut.CreateOrderAsync(order);
+
+        // Assert
+        Assert.Equal(1, result);
+        _repoMock.Verify(r => r.SaveAsync(It.IsAny<Order>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-10)]
+    public async Task CreateOrderAsync_InvalidAmount_ThrowsArgumentException(decimal amount)
+    {
+        var order = new Order { Amount = amount };
+        await Assert.ThrowsAsync<ArgumentException>(() => _sut.CreateOrderAsync(order));
     }
 }
 ```
 
-### 2. Giả lập hành vi (Setup) và xác minh (Verify)
+### Mẫu Mock với NSubstitute:
 ```csharp
-[Fact]
-public async Task GetUser_ShouldReturnUser_WhenUserExists()
+public class OrderServiceTests
 {
-    var expectedUser = new User { Id = 1, Name = "Test" };
-    _userRepoMock.Setup(r => r.GetByIdAsync(1))
-                 .ReturnsAsync(expectedUser);
+    private readonly IOrderRepository _repo = Substitute.For<IOrderRepository>();
+    private readonly OrderService _sut;
 
-    var result = await _sut.GetUserAsync(1);
+    public OrderServiceTests()
+    {
+        _sut = new OrderService(_repo);
+    }
 
-    Assert.NotNull(result);
-    Assert.Equal("Test", result.Name);
-    _userRepoMock.Verify(r => r.GetByIdAsync(1), Times.Once);
+    [Fact]
+    public async Task CreateOrderAsync_ValidOrder_CallsSave()
+    {
+        var order = new Order { Amount = 50 };
+        _repo.SaveAsync(Arg.Any<Order>()).Returns(Task.FromResult(1));
+
+        var result = await _sut.CreateOrderAsync(order);
+
+        Assert.Equal(1, result);
+        await _repo.Received(1).SaveAsync(Arg.Any<Order>());
+    }
 }
 ```
 
-### 3. Bắt tham số bằng Callback hoặc It.Is
-```csharp
-[Fact]
-public async Task CreateUser_ShouldPassCorrectUserToRepository()
-{
-    User capturedUser = null;
-    _userRepoMock.Setup(r => r.SaveAsync(It.IsAny<User>()))
-                 .Callback<User>(u => capturedUser = u)
-                 .Returns(Task.CompletedTask);
+---
 
-    await _sut.CreateUserAsync("Alice");
+## 8. Anti-pattern (Nghiêm cấm)
 
-    Assert.NotNull(capturedUser);
-    Assert.Equal("Alice", capturedUser.Name);
-    _userRepoMock.Verify(r => r.SaveAsync(It.Is<User>(u => u.Name == "Alice")), Times.Once);
-}
-```
-
-### 4. Kiểm tra Exception (ThrowsAsync / Throws)
-```csharp
-[Fact]
-public async Task GetUser_ShouldThrowKeyNotFoundException_WhenUserNotFound()
-{
-    _userRepoMock.Setup(r => r.GetByIdAsync(99))
-                 .ReturnsAsync((User)null);
-
-    await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.GetUserAsync(99));
-}
-```
-
-### 5. Kiểm thử biên với [Theory] và [InlineData]
-```csharp
-[Theory]
-[InlineData(-1, false)]
-[InlineData(0, false)]
-[InlineData(17, false)]
-[InlineData(18, true)]
-[InlineData(65, true)]
-public void IsValidAge_ShouldReturnExpectedResult(int age, boolean expected)
-{
-    var result = _sut.IsValidAge(age);
-    Assert.Equal(expected, result);
-}
-```
-
-## 7. Anti-pattern (Nghiêm cấm)
-
-1. Sửa source code chính trong project (như đổi quyền truy cập method từ `private` sang `public`, xóa validation) chỉ để dễ viết test và đẩy nhanh coverage.
-2. Hạ thấp ngưỡng coverage yêu cầu (dưới 90%) hoặc cheat test assertions (`Assert.True(true)`) để bypass vòng lặp.
-3. Thêm các class có logic thay đổi vào cờ `[ExcludeFromCodeCoverage]` hoặc cấu hình exclude của Coverlet để che giấu việc thiếu test.
-4. Mock các cấu trúc dữ liệu thuần túy (DTO, POCO, primitives, collections) thay vì khởi tạo đối tượng trực tiếp.
-5. Tự ý chạy toàn bộ test suite mà không hỏi ý kiến người dùng khi chưa có filter cụ thể.
+1. Sửa access modifier trong `src` (đổi `private` thành `public` hoặc `internal`) chỉ để phục vụ viết test thay vì kiểm thử qua public contract.
+2. Đặt `[Fact(Skip = "...")]` lên các test case đang fail để làm đẹp tỷ lệ pass/coverage.
+3. Chạy `dotnet test` toàn bộ solution khi chỉ sửa 1 method trong 1 class. Luôn dùng `--filter` để giữ tốc độ phản hồi dưới 5 giây.

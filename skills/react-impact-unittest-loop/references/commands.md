@@ -1,199 +1,224 @@
 # React Test & Coverage Commands Cheat Sheet
 
-## 1. Lệnh Git Diff xác định vùng thay đổi
+Tổng hợp các lệnh thực thi thực tế trong quy trình Vitest / Jest cho React.
 
-Xem danh sách file bị thay đổi:
+---
+
+## 1. Git Diff xác định dòng & hàm thay đổi
+
+### Danh sách file bị sửa
 ```bash
 git status -s
-git diff --name-only
+git diff --name-only HEAD~1 -- "src/**/*.{ts,tsx,js,jsx}"
 ```
 
-Xem chi tiết dòng code và hàm bị thay đổi (bỏ qua context lines để dễ map sang file báo cáo):
+### Lấy khoảng dòng bị sửa (hunks)
 ```bash
-git diff -U0 HEAD~1
-# Hoặc so sánh với branch base
-git diff -U0 origin/main...HEAD -- "src/**/*.{ts,tsx,js,jsx}"
+# -U0 loại bỏ dòng ngữ cảnh xung quanh để chỉ lấy chính xác dòng đổi
+git diff -U0 HEAD~1 -- "src/components/MyComponent.tsx"
 ```
 
-## 2. Chạy test chọn lọc và thu thập Coverage
-
-### Chạy test theo File cụ thể (Vitest)
+### Trích xuất danh sách hàm & khoảng dòng thay đổi bằng Node.js
 ```bash
-npx vitest run src/components/TargetComponent.test.tsx --coverage
+node -e "
+const { execSync } = require('child_process');
+const diff = execSync('git diff -U0 HEAD~1 -- \"src/**/*.{ts,tsx,js,jsx}\"', { encoding: 'utf-8' });
+const hunks = [];
+let currentFile = '';
+
+for (const line of diff.split('\n')) {
+  if (line.startsWith('+++ b/')) {
+    currentFile = line.replace('+++ b/', '').trim();
+  } else if (line.startsWith('@@')) {
+    const match = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+    if (match) {
+      const start = parseInt(match[1], 10);
+      const count = match[2] !== undefined ? parseInt(match[2], 10) : 1;
+      hunks.push({ file: currentFile, start, end: start + Math.max(count - 1, 0), header: line });
+    }
+  }
+}
+console.table(hunks);
+"
 ```
 
-### Chạy tất cả test liên quan đến file bị thay đổi (Vitest)
+---
+
+## 2. Chạy test chọn lọc (Selective Testing)
+
+Chỉ chạy test liên quan đến file bị thay đổi, không chạy full suite.
+
+### Vitest (v8 / istanbul)
 ```bash
-npx vitest related src/components/TargetComponent.tsx --coverage
+# 1. Chạy đúng file test với coverage
+npx vitest run src/components/MyComponent.test.tsx --coverage
+
+# 2. Tự động tìm và chạy test liên quan tới file source vừa sửa
+npx vitest related src/components/MyComponent.tsx --run --coverage
 ```
 
-### Chạy test theo File và giới hạn phạm vi coverage (Jest)
+### Jest
 ```bash
-npx jest src/components/TargetComponent.test.tsx --coverage --collectCoverageFrom="src/components/TargetComponent.tsx"
+# 1. Chạy file test cụ thể và chỉ gom coverage cho file component đó
+npx jest src/components/MyComponent.test.tsx --coverage --collectCoverageFrom="src/components/MyComponent.tsx"
+
+# 2. Tìm test liên quan tới file thay đổi
+npx jest --findRelatedTests src/components/MyComponent.tsx --coverage --collectCoverageFrom="src/components/MyComponent.tsx"
 ```
 
-### Chạy toàn bộ test suite (Chỉ dùng khi cần thiết và đã có xác nhận của user)
-```bash
-# Vitest
-npx vitest run --coverage
-
-# Jest
-npx jest --coverage
-```
-
-Vị trí file kết quả coverage mặc định:
-- HTML Report: `coverage/index.html` (Vitest) hoặc `coverage/lcov-report/index.html` (Jest)
+### Vị trí file coverage mặc định
+- HTML: `coverage/index.html` (Vitest) hoặc `coverage/lcov-report/index.html` (Jest)
 - LCOV: `coverage/lcov.info`
 - JSON: `coverage/coverage-final.json`
 
-## 3. Xem báo cáo HTML mặc định & Mở HTML
+---
 
-Mở trực tiếp file `index.html` trên trình duyệt:
+## 3. Lọc và tính Coverage trên hàm/dòng thay đổi từ `lcov.info`
 
-Trên Windows (PowerShell/CMD):
-```cmd
-start coverage/index.html
-```
+Vì Vitest và Jest không hỗ trợ sẵn `--changed-lines-coverage`, ta parse `coverage/lcov.info` theo dải dòng đã lấy từ git diff.
 
-Trên macOS:
+### Node.js script tính Statement & Branch coverage cho khoảng dòng cụ thể
 ```bash
-open coverage/index.html
-```
+# Cú pháp: node check-coverage.js <file-path> <start-line> <end-line> [lcov-path]
+node -e "
+const fs = require('fs');
+const [targetFile, startLine, endLine, lcovPath] = [
+  process.argv[1],
+  parseInt(process.argv[2], 10),
+  parseInt(process.argv[3], 10),
+  process.argv[4] || 'coverage/lcov.info'
+];
 
-Trên Linux:
-```bash
-xdg-open coverage/index.html
-```
+if (!fs.existsSync(lcovPath)) {
+  console.error('File lcov không tồn tại:', lcovPath);
+  process.exit(1);
+}
 
-Hoặc sử dụng serve HTTP cục bộ:
-```bash
-npx serve coverage
-```
+const content = fs.readFileSync(lcovPath, 'utf8');
+const lines = content.split('\n');
 
-## 4. Cách đọc và lọc Coverage từ lcov.info theo Dòng thay đổi
+let inFile = false;
+let linesTotal = 0, linesHit = 0;
+let branchTotal = 0, branchHit = 0;
 
-Các công cụ React (Vitest v8/Istanbul, Jest) không tự lọc changed-methods. Sau khi lấy được vùng dòng code thay đổi từ lệnh `git diff -U0` (ví dụ file `Counter.tsx` từ dòng `10` đến `20`), dùng script Node.js dưới đây để đọc file `coverage/lcov.info` và trích xuất trực tiếp tỷ lệ Line & Branch coverage cho các dòng đó.
-
-### Script Node.js trích xuất Line & Branch Coverage theo Line Range
-```bash
-node -e "const fs=require('fs');const lines=fs.readFileSync(process.argv[1],'utf8').split('\n');const file=process.argv[2],start=+process.argv[3],end=+process.argv[4];let inTarget=false,lt=0,lc=0,bt=0,bc=0;for(const l of lines){if(l.startsWith('SF:')&&l.includes(file))inTarget=true;else if(l==='end_of_record')inTarget=false;else if(inTarget&&l.startsWith('DA:')){const [ln,h]=l.slice(3).split(',').map(Number);if(ln>=start&&ln<=end){lt++;if(h>0)lc++;}}else if(inTarget&&l.startsWith('BRDA:')){const p=l.slice(5).split(',');const ln=Number(p[0]),tk=p[3];if(ln>=start&&ln<=end){bt++;if(tk!=='-'&&Number(tk)>0)bc++;}}}console.log(\`File: \${file} | Lines \${start}-\${end} | Line: \${lt?((lc/lt)*100).toFixed(2)+'%':'N/A'} | Branch: \${bt?((bc/bt)*100).toFixed(2)+'%':'N/A'}\`);" "coverage/lcov.info" "TargetComponent.tsx" 10 20
-```
-
-## 5. Lệnh đóng gói Evidence (Bằng chứng từng vòng lặp)
-
-Tạo thư mục evidence nếu chưa có:
-```bash
-mkdir -p evidence
-```
-
-Nén thư mục `coverage/` và test log:
-- Trên Linux / macOS:
-```bash
-zip -r evidence/react-loop-1.zip coverage/ logs/
-```
-- Trên Windows PowerShell:
-```powershell
-Compress-Archive -Path coverage, logs -DestinationPath evidence/react-loop-1.zip -Force
-```
-
-## 6. 5 Pattern Vitest/Jest & Testing Library tối thiểu
-
-### 1. Mock API / External Modules
-```tsx
-import { vi } from 'vitest'; // Jest: dùng jest.spyOn
-import * as api from './api';
-
-// Happy path
-vi.spyOn(api, 'fetchUserData').mockResolvedValue({ id: 1, name: 'Alice' });
-
-// Error branch
-vi.spyOn(api, 'fetchUserData').mockRejectedValue(new Error('Network error'));
-```
-
-### 2. Mock Child Component
-Giúp cô lập component cha, bỏ qua logic bên trong component con.
-```tsx
-import { vi } from 'vitest';
-
-vi.mock('./ChildComponent', () => ({
-  default: () => <div data-testid="mocked-child">Mocked Child</div>
-}));
-```
-
-### 3. Giả lập tương tác userEvent
-```tsx
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { vi } from 'vitest';
-import { Counter } from './Counter';
-
-test('click event increments count', async () => {
-  const user = userEvent.setup();
-  const onClickMock = vi.fn();
-
-  render(<Counter onClick={onClickMock} />);
-
-  const button = screen.getByRole('button', { name: /increment/i });
-  await user.click(button);
-
-  expect(onClickMock).toHaveBeenCalledTimes(1);
-});
-```
-
-### 4. Kiểm tra Exception / Async Error (Error Boundary / Rejects)
-```tsx
-test('handles api failure gracefully', async () => {
-  vi.spyOn(api, 'saveData').mockRejectedValue(new Error('Save failed'));
-  const user = userEvent.setup();
-
-  render(<Form />);
-  await user.click(screen.getByRole('button', { name: /submit/i }));
-
-  const errorMsg = await screen.findByText(/Save failed/i);
-  expect(errorMsg).toBeInTheDocument();
-});
-```
-
-### 5. Kiểm thử biên với test.each (Parameterized)
-```tsx
-import { test, expect } from 'vitest';
-
-test.each([
-  { age: 17, expected: false },
-  { age: 18, expected: true },
-  { age: 65, expected: true },
-  { age: -1, expected: false }
-])('isValidAge($age) returns $expected', ({ age, expected }) => {
-  expect(isValidAge(age)).toBe(expected);
-});
-```
-
-## 7. Cấu hình coverage chuẩn
-
-Cấu hình ngưỡng (thresholds) tối thiểu 90% (ví dụ với `vitest.config.ts`):
-```typescript
-import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
-  test: {
-    coverage: {
-      provider: 'v8', // hoặc 'istanbul'
-      reporter: ['text', 'html', 'lcov', 'json'],
-      thresholds: {
-        lines: 90,
-        functions: 90,
-        branches: 90,
-        statements: 90
+for (const line of lines) {
+  if (line.startsWith('SF:') && line.includes(targetFile)) {
+    inFile = true;
+  } else if (line === 'end_of_record') {
+    inFile = false;
+  } else if (inFile) {
+    if (line.startsWith('DA:')) {
+      const [lineNum, hitCount] = line.slice(3).split(',').map(Number);
+      if (lineNum >= startLine && lineNum <= endLine) {
+        linesTotal++;
+        if (hitCount > 0) linesHit++;
+      }
+    } else if (line.startsWith('BRDA:')) {
+      const parts = line.slice(5).split(',');
+      const lineNum = Number(parts[0]);
+      const taken = parts[3];
+      if (lineNum >= startLine && lineNum <= endLine) {
+        branchTotal++;
+        if (taken !== '-' && Number(taken) > 0) branchHit++;
       }
     }
   }
-});
+}
+
+const linePct = linesTotal ? ((linesHit / linesTotal) * 100).toFixed(2) : '100.00';
+const branchPct = branchTotal ? ((branchHit / branchTotal) * 100).toFixed(2) : '100.00';
+
+console.log(\`[Coverage Dòng Sửa] \${targetFile} (Lines \${startLine}-\${endLine})\`);
+console.log(\`- Line: \${linePct}% (\${linesHit}/\${linesTotal})\`);
+console.log(\`- Branch: \${branchPct}% (\${branchHit}/\${branchTotal})\`);
+console.log(Number(linePct) >= 90 && Number(branchPct) >= 90 ? '=> PASS (>= 90%)' : '=> FAIL (< 90%)');
+" "src/components/MyComponent.tsx" 15 35
 ```
 
-## 8. Anti-pattern (Nghiêm cấm)
+---
 
-1. Sửa source code chính trong project (như bỏ hook khó, đổi cấu trúc component tùy tiện) chỉ để dễ viết test và đẩy nhanh coverage mà không hỏi ý kiến team/user.
-2. Hạ thấp ngưỡng coverage yêu cầu (dưới 90%) hoặc cheat test (dùng `expect(true).toBe(true)`) để bypass vòng lặp.
-3. Test chi tiết cài đặt (Implementation Details): Query trực tiếp css class nội bộ (`.active`), thay vì test theo vai trò và label của người dùng (`getByRole`, `getByLabelText`).
-4. Bỏ quên kiểm tra nhánh Error và Null/Empty: Chỉ test Happy Path khiến nhánh xử lý ngoại lệ không được bảo vệ.
-5. Tự ý chạy toàn bộ test suite (full coverage run) làm chậm máy tính mà không hỏi ý kiến khi vùng ảnh hưởng chỉ ở 1-2 file.
+## 4. Xem báo cáo HTML (Mở trên trình duyệt)
+
+### Mở trực tiếp file HTML
+- **Windows (CMD/PowerShell)**:
+  ```cmd
+  start coverage/index.html
+  ```
+- **macOS**:
+  ```bash
+  open coverage/index.html
+  ```
+- **Linux**:
+  ```bash
+  xdg-open coverage/index.html
+  ```
+
+### Mở qua Local Server (nếu gặp hạn chế CORS/file URL)
+```bash
+# Dùng serve
+npx serve coverage -p 3000
+
+# Hoặc dùng Vite preview nếu có cấu hình thư mục build tương ứng
+npx vite preview --outDir coverage
+```
+
+---
+
+## 5. Nén và lưu trữ Evidence (Bằng chứng từng vòng lặp)
+
+Tạo thư mục `evidence/` và nén artifact để báo cáo sau mỗi lượt chạy:
+
+### Linux / macOS
+```bash
+mkdir -p evidence
+zip -r evidence/react-loop-1.zip coverage/
+```
+
+### Windows (PowerShell)
+```powershell
+if (!(Test-Path -Path "evidence")) { New-Item -ItemType Directory -Path "evidence" }
+Compress-Archive -Path coverage -DestinationPath evidence/react-loop-1.zip -Force
+```
+
+### Cross-platform (Node.js script không cần cài thêm tool ngoài)
+```bash
+node -e "
+const fs = require('fs');
+const { execSync } = require('child_process');
+if (!fs.existsSync('evidence')) fs.mkdirSync('evidence');
+const isWin = process.platform === 'win32';
+const cmd = isWin
+  ? 'powershell Compress-Archive -Path coverage -DestinationPath evidence/react-loop-1.zip -Force'
+  : 'zip -r evidence/react-loop-1.zip coverage/';
+execSync(cmd, { stdio: 'inherit' });
+"
+```
+
+---
+
+## 6. Patterns Mock chuẩn trong Vitest / Testing Library
+
+### Mock Function & Spy
+```tsx
+import { vi } from 'vitest';
+
+const onClick = vi.fn();
+const fetchSpy = vi.spyOn(api, 'getUser').mockResolvedValue({ id: 1, name: 'Alice' });
+```
+
+### Mock Component con (giảm tải logic phụ thuộc)
+```tsx
+vi.mock('./ComplexChild', () => ({
+  default: () => <div data-testid="mock-child">Mocked Child</div>
+}));
+```
+
+### Mock Browser API (LocalStorage, ResizeObserver)
+```tsx
+vi.stubGlobal('localStorage', {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+});
+```
