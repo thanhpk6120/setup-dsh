@@ -278,8 +278,10 @@ $cordisTemplate = @'
   config:
     serverName: memorix
     transport: stdio
-    command: memorix
+    command: npx
     args:
+      - -y
+      - memorix@latest
       - serve
       - --mode
       - lite
