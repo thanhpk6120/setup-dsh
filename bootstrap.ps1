@@ -134,6 +134,17 @@ if (-not $SkipInstall -and -not (Get-Command "memorix" -ErrorAction SilentlyCont
 }
 
 if (-not $SkipInstall) {
+    Write-Host "==> Registering memorix DSH plugin + hooks..." -ForegroundColor Cyan
+    if (-not $DryRun) {
+        try {
+            memorix setup --agent dsh --global
+        } catch {
+            Write-Warning "memorix setup failed (hooks not registered, run it manually): $($_.Exception.Message)"
+        }
+    }
+}
+
+if (-not $SkipInstall) {
     Write-Host "==> Installing gitnexus globally..." -ForegroundColor Cyan
     if (-not $DryRun) {
         try {
@@ -278,10 +289,8 @@ $cordisTemplate = @'
   config:
     serverName: memorix
     transport: stdio
-    command: npx
+    command: memorix
     args:
-      - -y
-      - memorix@latest
       - serve
       - --mode
       - lite
