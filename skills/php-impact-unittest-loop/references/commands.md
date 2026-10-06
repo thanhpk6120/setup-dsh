@@ -136,23 +136,25 @@ Serve thư mục coverage để xem qua browser:
 php -S 127.0.0.1:8000 -t coverage/
 ```
 
-## 7. Nén evidence thành ZIP mỗi vòng
+## 7. Nén evidence thành ZIP khi hoàn tất
 
-Đặt tên file theo vòng lặp (`loop1`, `loop2`):
+Chỉ tạo file ZIP một lần duy nhất khi thành công hoặc dừng ở cuối quy trình. Tạo thư mục `evidence` nếu chưa có:
 
 ```bash
-zip -r evidence-loop1.zip clover.xml coverage/
+mkdir -p evidence
+zip -r evidence/php-final-coverage.zip clover.xml coverage/
 ```
 
 Windows PowerShell (nếu không có lệnh zip):
 
 ```powershell
-Compress-Archive -Path clover.xml,coverage -DestinationPath evidence-loop1.zip -Force
+New-Item -ItemType Directory -Force -Path evidence
+Compress-Archive -Path clover.xml,coverage -DestinationPath evidence/php-final-coverage.zip -Force
 ```
 
 Kiểm tra file ZIP vừa tạo:
 
 ```bash
-ls -lh evidence-loop*.zip
-unzip -l evidence-loop1.zip | head -n 20
+ls -lh evidence/php-final-coverage.zip
+unzip -l evidence/php-final-coverage.zip | head -n 20
 ```

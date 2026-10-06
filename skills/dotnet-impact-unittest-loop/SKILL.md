@@ -63,6 +63,11 @@ Dừng vòng lặp và hỏi người dùng nếu gặp một trong các điều
 - Coverage không tăng qua 2 vòng lặp liên tiếp.
 Trình bày rõ file, method, nguyên nhân và đề xuất phương án.
 
+## 7. Đóng gói kết quả (Final Artifact)
+
+Khi vòng lặp kết thúc (đạt 90% hoặc buộc dừng theo điều kiện ở bước 6), nén thư mục báo cáo HTML một lần duy nhất. File ZIP kết quả phải lưu tại: `evidence/dotnet-final-coverage.zip`.
+Tuyệt đối **không** tạo file ZIP sau mỗi vòng lặp.
+
 ## Output
 
 ```markdown
@@ -84,6 +89,9 @@ Trình bày rõ file, method, nguyên nhân và đề xuất phương án.
 ## Nhật ký vòng lặp
 - Vòng 1: Đạt X% line / Y% branch. Thiếu: Nhánh kiểm tra ArgumentNullException.
 - Vòng 2: Đạt 95% line / 92% branch. Đã bổ sung Theory kiểm thử giá trị rỗng.
+
+## Bằng chứng (Evidence)
+- Nén bằng chứng: evidence/dotnet-final-coverage.zip
 ```
 
 ## Safety boundaries

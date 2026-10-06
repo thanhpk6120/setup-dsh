@@ -47,13 +47,14 @@ Bật extension thu thập coverage (Xdebug hoặc PCOV) để lấy kết quả
 Nếu chưa đạt 90%, bổ sung test case cho các trường hợp còn thiếu (dòng code không được hit), sau đó chạy lại lệnh PHPUnit với `--filter` và `--coverage-clover`.
 Giới hạn tối đa 5 vòng lặp. Ở mỗi vòng, ghi log: Số thứ tự vòng / % coverage còn thiếu / Dòng (Lines) cụ thể chưa được phủ.
 
-## 6. Dừng và xin ý kiến (Stop-and-ask)
+## 6. Hoàn tất hoặc dừng (Stop-and-ask)
 
 Dừng vòng lặp và hỏi người dùng nếu gặp một trong các điều kiện:
 - Phát hiện lỗi logic nghiệp vụ làm hỏng ứng dụng.
 - Mã nguồn cũ quá phức tạp hoặc có dependency ngầm (hidden dependencies) khiến việc mock thất bại (untestable code).
 - Coverage không cải thiện sau 2 vòng lặp liên tiếp.
-Khi dừng, trình bày rõ nguyên nhân kèm theo thông báo lỗi từ PHPUnit hoặc đoạn mã gây tắc nghẽn.
+Khi hoàn tất quy trình (thành công đạt 90% hoặc buộc dừng theo điều kiện trên), nén báo cáo thành file ZIP một lần duy nhất tại `evidence/php-final-coverage.zip`. Không nén file qua mỗi vòng lặp.
+Khi dừng sớm, trình bày rõ nguyên nhân kèm theo thông báo lỗi từ PHPUnit hoặc đoạn mã gây tắc nghẽn.
 
 ## Output
 

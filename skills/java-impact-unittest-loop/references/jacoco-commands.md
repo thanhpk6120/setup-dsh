@@ -141,3 +141,14 @@ void testAgeValidation(int age, boolean expected) {
 1. Sửa source code `src/main` (như xóa logic khó test, thay đổi quyền truy cập biến) chỉ để dễ viết test và tăng coverage.
 2. Hạ threshold (từ 0.90 xuống thấp hơn) để bypass CI pipeline thay vì viết thêm test cho các trường hợp thiếu.
 3. Thêm các class bị ảnh hưởng hoặc có thay đổi logic vào danh sách `exclude` của plugin Jacoco để che giấu việc thiếu test.
+
+## 6. Nén Bằng Chứng (Evidence)
+
+Thực hiện sau khi kết thúc/thoát vòng lặp:
+```bash
+mkdir -p evidence
+# Với Maven:
+zip -r evidence/java-final-coverage.zip target/site/jacoco/
+# Với Gradle:
+zip -r evidence/java-final-coverage.zip build/reports/jacoco/test/
+```

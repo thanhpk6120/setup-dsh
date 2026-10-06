@@ -164,20 +164,20 @@ npx vite preview --outDir coverage
 
 ---
 
-## 5. Nén và lưu trữ Evidence (Bằng chứng từng vòng lặp)
+## 5. Nén và lưu trữ Evidence (Bằng chứng)
 
-Tạo thư mục `evidence/` và nén artifact để báo cáo sau mỗi lượt chạy:
+Tạo thư mục `evidence/` và nén artifact để báo cáo một lần duy nhất ở cuối quy trình:
 
 ### Linux / macOS
 ```bash
 mkdir -p evidence
-zip -r evidence/react-loop-1.zip coverage/
+zip -r evidence/react-final-coverage.zip coverage/
 ```
 
 ### Windows (PowerShell)
 ```powershell
 if (!(Test-Path -Path "evidence")) { New-Item -ItemType Directory -Path "evidence" }
-Compress-Archive -Path coverage -DestinationPath evidence/react-loop-1.zip -Force
+Compress-Archive -Path coverage -DestinationPath evidence/react-final-coverage.zip -Force
 ```
 
 ### Cross-platform (Node.js script không cần cài thêm tool ngoài)
@@ -188,8 +188,8 @@ const { execSync } = require('child_process');
 if (!fs.existsSync('evidence')) fs.mkdirSync('evidence');
 const isWin = process.platform === 'win32';
 const cmd = isWin
-  ? 'powershell Compress-Archive -Path coverage -DestinationPath evidence/react-loop-1.zip -Force'
-  : 'zip -r evidence/react-loop-1.zip coverage/';
+  ? 'powershell Compress-Archive -Path coverage -DestinationPath evidence/react-final-coverage.zip -Force'
+  : 'zip -r evidence/react-final-coverage.zip coverage/';
 execSync(cmd, { stdio: 'inherit' });
 "
 ```

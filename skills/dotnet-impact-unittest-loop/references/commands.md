@@ -104,7 +104,7 @@ reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coveragereport"
 
 ---
 
-## 6. Mở HTML Report và Nén Zip
+## 6. Mở HTML Report và Đóng gói kết quả cuối cùng
 
 ### Mở HTML report trong trình duyệt:
 ```powershell
@@ -115,13 +115,17 @@ Start-Process "coveragereport\index.html"
 xdg-open coveragereport/index.html || open coveragereport/index.html
 ```
 
-### Nén thư mục report thành file ZIP:
+### Nén thư mục report thành file ZIP (Chỉ làm 1 lần vào cuối quy trình):
+Tạo thư mục `evidence` nếu chưa có và lưu file nén với tên `dotnet-final-coverage.zip`.
+
 ```powershell
 # PowerShell
-Compress-Archive -Path "coveragereport\*" -DestinationPath "coveragereport.zip" -Force
+New-Item -ItemType Directory -Force -Path evidence
+Compress-Archive -Path "coveragereport\*" -DestinationPath "evidence\dotnet-final-coverage.zip" -Force
 
 # Bash / Linux
-zip -r coveragereport.zip coveragereport/
+mkdir -p evidence
+zip -r evidence/dotnet-final-coverage.zip coveragereport/
 ```
 
 ---

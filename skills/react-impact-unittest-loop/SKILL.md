@@ -33,13 +33,12 @@ Sử dụng skill này sau khi mã nguồn React thay đổi, để đánh giá 
 - Nếu coverage của phần code đổi chưa đạt 90% (Statement và Branch), tiếp tục bổ sung test case.
 - Giới hạn tối đa **5 vòng lặp**.
 - Mỗi vòng, nếu cần, có thể mở file báo cáo HTML (bằng lệnh OS hoặc `npx serve coverage`) để phân tích nguyên nhân thiếu.
-- Đóng gói (zip) lại bằng chứng coverage và test log sau mỗi vòng.
 
-### 5. Dừng và Hỏi (Stop-and-ask)
+### 5. Hoàn thành / Dừng và Hỏi (Stop-and-ask)
+- Nén bằng chứng (coverage, log) **một lần duy nhất** vào file `evidence/react-final-coverage.zip` khi thành công đạt 90% hoặc buộc phải dừng ở cuối quy trình.
 - Nếu kẹt (không thể test do component quá phức tạp / tightly coupled), hoặc coverage không tăng 2 vòng liên tiếp.
 - Nếu phát hiện code bị lỗi logic.
-- Dừng ngay và hỏi ý kiến người dùng, gửi kèm log/bằng chứng.
-
+- Dừng ngay và báo cáo/hỏi ý kiến người dùng, gửi kèm file bằng chứng.
 ## Output Template
 
 Báo cáo kết quả theo format sau:
@@ -63,9 +62,13 @@ Báo cáo kết quả theo format sau:
 - FUNCTION: W%
 
 ## 4. Nhật ký vòng lặp
-- Vòng 1: Đạt 70% branch. Thiếu: Nhánh báo lỗi API. (Bằng chứng: evidence/react-loop-1.zip)
-- Vòng 2: Đạt 95% branch. Đã phủ toàn bộ. (Bằng chứng: evidence/react-loop-2.zip)
+- Vòng 1: Đạt 70% branch. Thiếu: Nhánh báo lỗi API.
+- Vòng 2: Đạt 95% branch. Đã phủ toàn bộ.
+
+## 5. Bằng chứng
+- File: `evidence/react-final-coverage.zip`
 ```
+
 
 ## Safety Boundaries (Luật an toàn)
 

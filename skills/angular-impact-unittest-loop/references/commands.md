@@ -100,10 +100,10 @@ open coverage/<project-name>/index.html
 
 ## 6. Nén Bằng Chứng (Evidence)
 
-Lưu báo cáo coverage và bằng chứng vòng lặp vào file zip:
+Lưu báo cáo coverage và bằng chứng vào file zip một lần duy nhất khi thành công hoặc dừng ở cuối quy trình:
 ```bash
 mkdir -p evidence
-zip -r evidence/angular-loop-1.zip coverage/
+zip -r evidence/angular-final-coverage.zip coverage/
 ```
 
 ## 7. Mẫu Thiết Lập Mock Test Với `jasmine.createSpyObj`

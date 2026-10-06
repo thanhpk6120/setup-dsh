@@ -54,6 +54,8 @@ Dừng vòng lặp và hỏi người dùng nếu:
 - Coverage không thay đổi/tăng trong 2 vòng lặp liên tiếp.
 Trình bày rõ câu hỏi cùng logs hoặc code chứng minh.
 
+Khi hoàn thành quy trình (đạt coverage 90%) hoặc khi phải dừng lại, thực hiện nén file báo cáo coverage một lần duy nhất vào `evidence/angular-final-coverage.zip`.
+
 ## Output
 
 ```markdown
@@ -74,7 +76,7 @@ Trình bày rõ câu hỏi cùng logs hoặc code chứng minh.
 
 ## Bằng chứng kiểm thử (Evidence)
 - File báo cáo: coverage/<project-name>/index.html
-- Nén bằng chứng: evidence/angular-loop-<n>.zip
+- Nén bằng chứng: evidence/angular-final-coverage.zip
 
 ## Nhật ký vòng lặp
 - Vòng 1: Đạt X% nhánh. Thiếu: Nhánh if(data == null).

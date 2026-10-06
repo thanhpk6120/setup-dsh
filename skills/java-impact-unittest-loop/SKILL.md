@@ -57,6 +57,11 @@ Dừng vòng lặp và hỏi người dùng nếu thỏa mãn một trong các �
 - Coverage không tăng trong 2 vòng lặp liên tiếp.
 Khi dừng, trình bày rõ câu hỏi cùng với bằng chứng cụ thể từ logs hoặc code.
 
+## 7. Đóng gói kết quả (Zip evidence)
+
+Việc tạo ZIP phải là bước cuối cùng sau khi thoát khỏi vòng lặp cải thiện độ phủ.
+Tạo thư mục `evidence/` và nén thư mục báo cáo JaCoCo (ví dụ: `target/site/jacoco/` hoặc `build/reports/jacoco/`) với tên file là `evidence/java-final-coverage.zip`.
+
 ## Output
 
 ```markdown
@@ -78,6 +83,9 @@ Khi dừng, trình bày rõ câu hỏi cùng với bằng chứng cụ thể t�
 ## Nhật ký vòng lặp
 - Vòng 1: Đạt X% nhánh. Thiếu: Nhánh kiểm tra null.
 - Vòng 2: Đạt Y% nhánh. Thiếu: Nhánh kiểm tra ngoại lệ.
+
+## Bằng chứng kiểm thử (Evidence)
+- Nén bằng chứng: evidence/java-final-coverage.zip
 ```
 
 ## Safety boundaries
