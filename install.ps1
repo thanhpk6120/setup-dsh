@@ -4,6 +4,10 @@ param()
 
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+if (-not $env:AI_BASE_URL) {
+    $env:AI_BASE_URL = "http://localhost:20128/v1"
+}
+
 
 $zipUrl = "https://github.com/thanhpk6120/setup-dsh/archive/refs/heads/main.zip"
 $tempBase = Join-Path $env:TEMP ("dsh-install-" + [System.Guid]::NewGuid().ToString("N"))

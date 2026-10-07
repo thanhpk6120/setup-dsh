@@ -1,6 +1,6 @@
 # setup-deepseek-harness
 
-Script bootstrap thiết lập môi trường và cấu hình cho DeepSeek Harness (DSH Desktop / Web profile) trên máy mới, tương tự như setup của `.omp`. Default AI Base URL sử dụng `https://openrouter.ai/api/v1`.
+Script bootstrap thiết lập môi trường và cấu hình cho DeepSeek Harness (DSH Desktop / Web profile) trên máy mới, tương tự như setup của `.omp`. Default AI Base URL sử dụng `http://localhost:20128/v1`.
 
 ## Cấu hình sinh ra (`cordis.patch.yml`)
 
@@ -40,6 +40,7 @@ Bộ script tuân thủ 7 hợp đồng nguyên tắc:
 Mở PowerShell trên máy mới và chạy:
 
 ```powershell
+$env:AI_BASE_URL = "http://localhost:20128/v1"
 irm https://raw.githubusercontent.com/thanhpk6120/setup-dsh/main/install.ps1 | iex
 ```
 

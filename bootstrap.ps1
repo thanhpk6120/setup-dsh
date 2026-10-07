@@ -420,7 +420,7 @@ function Setup-CloakBrowser {
 Write-Host "==> Preparing configuration file..." -ForegroundColor Cyan
 Write-Host ""
 Write-Host "==> Gathering configuration..." -ForegroundColor Cyan
-$aiBaseUrl = Get-EnvOrPrompt -EnvName "AI_BASE_URL" -PromptMessage "AI Base URL" -DefaultValue "https://openrouter.ai/api/v1"
+$aiBaseUrl = Get-EnvOrPrompt -EnvName "AI_BASE_URL" -PromptMessage "AI Base URL" -DefaultValue "http://localhost:20128/v1"
 $aiApiKey = Get-EnvOrPrompt -EnvName "AI_API_KEY" -PromptMessage "AI API Key" -DefaultValue ""
 $jiraUrl = Get-EnvOrPrompt -EnvName "JIRA_URL" -PromptMessage "Jira URL" -DefaultValue "https://jira.cybertech.vn"
 $jiraToken = Get-EnvOrPrompt -EnvName "JIRA_PERSONAL_TOKEN" -PromptMessage "Jira Personal Token" -DefaultValue "YOUR_JIRA_PERSONAL_TOKEN"
