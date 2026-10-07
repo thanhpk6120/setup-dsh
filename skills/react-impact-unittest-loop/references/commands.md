@@ -50,11 +50,11 @@ Chỉ chạy test liên quan đến file bị thay đổi, không chạy full su
 
 ### Vitest (v8 / istanbul)
 ```bash
-# 1. Chạy đúng file test với coverage
-npx vitest run src/components/MyComponent.test.tsx --coverage
+# 1. Chạy đúng file test với coverage (cần khai báo reporter lcov/json vì Vitest v8 không tự sinh lcov)
+npx vitest run src/components/MyComponent.test.tsx --coverage --coverage.reporter=lcov --coverage.reporter=json
 
 # 2. Tự động tìm và chạy test liên quan tới file source vừa sửa
-npx vitest related src/components/MyComponent.tsx --run --coverage
+npx vitest related src/components/MyComponent.tsx --run --coverage --coverage.reporter=lcov --coverage.reporter=json
 ```
 
 ### Jest
@@ -73,20 +73,22 @@ npx jest --findRelatedTests src/components/MyComponent.tsx --coverage --collectC
 
 ---
 
-## 3. Lọc và tính Coverage trên hàm/dòng thay đổi từ `lcov.info`
+## 3. Lọc và tính Coverage trên hàm/dòng thay đổi
 
-Vì Vitest và Jest không hỗ trợ sẵn `--changed-lines-coverage`, ta parse `coverage/lcov.info` theo dải dòng đã lấy từ git diff.
+Vì Vitest và Jest không hỗ trợ sẵn `--changed-lines-coverage`, ta parse `coverage/lcov.info` hoặc `coverage/coverage-final.json` theo dải dòng đã lấy từ git diff.
 
-### Node.js script tính Statement & Branch coverage cho khoảng dòng cụ thể
+### Node.js script tính Statement, Branch & Function coverage từ lcov.info
 ```bash
-# Cú pháp: node check-coverage.js <file-path> <start-line> <end-line> [lcov-path]
+# Lưu file thành check-coverage.js và chạy: node check-coverage.js <file-path> <start-line> <end-line> [lcov-path]
+# Hoặc chạy trực tiếp qua node -e như bên dưới:
 node -e "
 const fs = require('fs');
+const args = process.argv[1] && process.argv[1].endsWith('.js') ? process.argv.slice(2) : process.argv.slice(1);
 const [targetFile, startLine, endLine, lcovPath] = [
-  process.argv[1],
-  parseInt(process.argv[2], 10),
-  parseInt(process.argv[3], 10),
-  process.argv[4] || 'coverage/lcov.info'
+  args[0],
+  parseInt(args[1], 10),
+  parseInt(args[2], 10),
+  args[3] || 'coverage/lcov.info'
 ];
 
 if (!fs.existsSync(lcovPath)) {
@@ -100,9 +102,11 @@ const lines = content.split('\n');
 let inFile = false;
 let linesTotal = 0, linesHit = 0;
 let branchTotal = 0, branchHit = 0;
+let fnMap = {}; // name -> { line, hit }
+const normalizePath = (p) => p.replace(/\\\\/g, '/');
 
 for (const line of lines) {
-  if (line.startsWith('SF:') && line.includes(targetFile)) {
+  if (line.startsWith('SF:') && normalizePath(line).includes(normalizePath(targetFile))) {
     inFile = true;
   } else if (line === 'end_of_record') {
     inFile = false;
@@ -121,21 +125,85 @@ for (const line of lines) {
         branchTotal++;
         if (taken !== '-' && Number(taken) > 0) branchHit++;
       }
+    } else if (line.startsWith('FN:')) {
+      const [ln, name] = line.slice(3).split(',');
+      fnMap[name] = { line: Number(ln), hit: 0 };
+    } else if (line.startsWith('FNDA:')) {
+      const [hit, name] = line.slice(5).split(',');
+      if (fnMap[name]) fnMap[name].hit = Number(hit);
     }
+  }
+}
+
+let fnTotal = 0, fnHit = 0;
+for (const [name, data] of Object.entries(fnMap)) {
+  if (data.line >= startLine && data.line <= endLine) {
+    fnTotal++;
+    if (data.hit > 0) fnHit++;
   }
 }
 
 const linePct = linesTotal ? ((linesHit / linesTotal) * 100).toFixed(2) : '100.00';
 const branchPct = branchTotal ? ((branchHit / branchTotal) * 100).toFixed(2) : '100.00';
+const fnPct = fnTotal ? ((fnHit / fnTotal) * 100).toFixed(2) : '100.00';
 
 console.log(\`[Coverage Dòng Sửa] \${targetFile} (Lines \${startLine}-\${endLine})\`);
 console.log(\`- Line: \${linePct}% (\${linesHit}/\${linesTotal})\`);
 console.log(\`- Branch: \${branchPct}% (\${branchHit}/\${branchTotal})\`);
-console.log(Number(linePct) >= 90 && Number(branchPct) >= 90 ? '=> PASS (>= 90%)' : '=> FAIL (< 90%)');
+console.log(\`- Function: \${fnPct}% (\${fnHit}/\${fnTotal})\`);
+console.log(Number(linePct) >= 90 && Number(branchPct) >= 90 && Number(fnPct) >= 90 ? '=> PASS (>= 90%)' : '=> FAIL (< 90%)');
 " "src/components/MyComponent.tsx" 15 35
 ```
 
----
+### Node.js script tính từ coverage-final.json (Phương án thay thế)
+```bash
+node -e "
+const fs = require('fs');
+const args = process.argv[1] && process.argv[1].endsWith('.js') ? process.argv.slice(2) : process.argv.slice(1);
+const [targetFile, startLine, endLine, jsonPath] = [args[0], parseInt(args[1], 10), parseInt(args[2], 10), args[3] || 'coverage/coverage-final.json'];
+
+if (!fs.existsSync(jsonPath)) process.exit(1);
+const covData = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+const normalizePath = (p) => p.replace(/\\\\/g, '/');
+const fileKey = Object.keys(covData).find(k => normalizePath(k).includes(normalizePath(targetFile)));
+if (!fileKey) { console.log('Không tìm thấy file trong coverage'); process.exit(0); }
+
+const fileCov = covData[fileKey];
+let stTotal=0, stHit=0, brTotal=0, brHit=0, fnTotal=0, fnHit=0;
+
+for(const [k, v] of Object.entries(fileCov.statementMap)) {
+  if(v.start.line >= startLine && v.start.line <= endLine) {
+     stTotal++;
+     if(fileCov.s[k] > 0) stHit++;
+  }
+}
+
+for(const [k, v] of Object.entries(fileCov.branchMap)) {
+  if(v.loc.start.line >= startLine && v.loc.start.line <= endLine) {
+     fileCov.b[k].forEach(hit => {
+       brTotal++;
+       if(hit > 0) brHit++;
+     });
+  }
+}
+
+for(const [k, v] of Object.entries(fileCov.fnMap)) {
+  if(v.decl.start.line >= startLine && v.decl.start.line <= endLine) {
+     fnTotal++;
+     if(fileCov.f[k] > 0) fnHit++;
+  }
+}
+
+const stPct = stTotal ? ((stHit/stTotal)*100).toFixed(2) : '100.00';
+const brPct = brTotal ? ((brHit/brTotal)*100).toFixed(2) : '100.00';
+const fnPct = fnTotal ? ((fnHit/fnTotal)*100).toFixed(2) : '100.00';
+
+console.log(\`[Coverage JSON] \${targetFile} (Lines \${startLine}-\${endLine})\`);
+console.log(\`- Statement: \${stPct}% (\${stHit}/\${stTotal})\`);
+console.log(\`- Branch: \${brPct}% (\${brHit}/\${brTotal})\`);
+console.log(\`- Function: \${fnPct}% (\${fnHit}/\${fnTotal})\`);
+" "src/components/MyComponent.tsx" 15 35
+```
 
 ## 4. Xem báo cáo HTML (Mở trên trình duyệt)
 

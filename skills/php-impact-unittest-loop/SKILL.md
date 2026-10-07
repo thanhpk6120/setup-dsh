@@ -41,8 +41,8 @@ Bật extension thu thập coverage (Xdebug hoặc PCOV) để lấy kết quả
 
 ## 5. Vòng lặp cải thiện độ phủ (Loop-until-90)
 
-Đọc file báo cáo `clover.xml`. Tìm các thẻ `<file>` và `<class>`, `<line>` hoặc `<metrics>` tương ứng với file/hàm đã sửa.
-Đánh giá tỷ lệ phần trăm Statements (dòng lệnh) và Methods. Phép tính: `(coveredstatements / statements) * 100`.
+Đọc file báo cáo `clover.xml`. Tìm các thẻ `<file>`, `<class>`, `<line>` và `<metrics>` tương ứng (lưu ý: Clover XML không có thẻ `<method>` riêng, method được biểu diễn qua `<line type="method" name="...">`).
+Đánh giá tỷ lệ phần trăm Statements (dòng lệnh) và Methods từ thuộc tính của `<metrics>` hoặc đếm thẻ `<line>`. Phép tính: `(coveredstatements / statements) * 100` và `(coveredmethods / methods) * 100`.
 Điều kiện đạt: Tỷ lệ Statements (Line coverage) và Branch/Path coverage (nếu có) lớn hơn 90%.
 Nếu chưa đạt 90%, bổ sung test case cho các trường hợp còn thiếu (dòng code không được hit), sau đó chạy lại lệnh PHPUnit với `--filter` và `--coverage-clover`.
 Giới hạn tối đa 5 vòng lặp. Ở mỗi vòng, ghi log: Số thứ tự vòng / % coverage còn thiếu / Dòng (Lines) cụ thể chưa được phủ.

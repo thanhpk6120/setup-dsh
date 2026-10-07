@@ -24,10 +24,10 @@ Sử dụng skill này sau khi mã nguồn React thay đổi, để đánh giá 
 
 ### 3. Chạy Selective & Đọc Coverage
 - Chạy test **chỉ cho file bị thay đổi** để nhanh và cô lập:
-  - Vitest: `vitest run <file.test.tsx> --coverage` hoặc `vitest related <file.tsx> --coverage`
+  - Vitest: `vitest run <file.test.tsx> --coverage --coverage.reporter=lcov --coverage.reporter=json` hoặc `vitest related <file.tsx> --run --coverage --coverage.reporter=lcov --coverage.reporter=json`
   - Jest: `jest <file.test.tsx> --coverage --collectCoverageFrom="<file.tsx>"`
 - Đọc file báo cáo mặc định sinh ra (ví dụ `coverage/lcov.info` hoặc `coverage/coverage-final.json`).
-- Áp dụng bộ lọc (script) trên file lcov để tính toán tỷ lệ Statement/Branch coverage của riêng **các hàm/dòng bị thay đổi**.
+- Áp dụng bộ lọc (script) trên file lcov hoặc coverage-final.json để tính toán tỷ lệ Statement/Branch/Function coverage của riêng **các hàm/dòng bị thay đổi**.
 
 ### 4. Vòng lặp tối ưu 90% (Loop)
 - Nếu coverage của phần code đổi chưa đạt 90% (Statement và Branch), tiếp tục bổ sung test case.

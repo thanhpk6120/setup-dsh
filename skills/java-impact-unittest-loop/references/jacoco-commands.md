@@ -39,7 +39,7 @@ Công thức tính %: `(covered / (covered + missed)) * 100`
 
 Script Python 1 dòng để tính % LINE coverage của một class (ví dụ `com/example/TargetClass`):
 ```bash
-python3 -c "import xml.etree.ElementTree as ET, sys; root = ET.parse(sys.argv[1]).getroot(); class_node = root.find('.//class[@name=\"com/example/TargetClass\"]'); counter = class_node.find('counter[@type=\"LINE\"]') if class_node else None; print(f'{int(counter.attrib[\"covered\"]) / (int(counter.attrib[\"covered\"]) + int(counter.attrib[\"missed\"])) * 100:.2f}%' if counter else 'Class not found')" target/site/jacoco/jacoco.xml
+python -c "import xml.etree.ElementTree as ET, sys; root = ET.parse(sys.argv[1]).getroot(); n = root.find('.//class[@name=\"com/example/TargetClass\"]'); c = n.find('counter[@type=\"LINE\"]') if n is not None else None; print(f'{int(c.attrib[\"covered\"]) / (int(c.attrib[\"covered\"]) + int(c.attrib[\"missed\"])) * 100:.2f}%' if c is not None else 'Class not found')" target/site/jacoco/jacoco.xml
 ```
 
 ## 3. Ngưỡng check tự động (jacoco-check)

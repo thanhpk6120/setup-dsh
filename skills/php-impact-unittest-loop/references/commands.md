@@ -86,29 +86,48 @@ php -d pcov.enabled=1 vendor/bin/phpunit --coverage-clover clover.xml --coverage
 
 ## 5. Đọc và lọc clover.xml theo method đổi
 
+Cấu trúc Clover thật do php-code-coverage sinh (nguồn mẫu: https://raw.githubusercontent.com/sebastianbergmann/php-code-coverage/main/tests/_files/Report/Clover/BankAccount-line.xml):
+- Thẻ gốc `<coverage>` chứa `<project>` chứa nhiều `<file name="...">` (namespaced thì bọc thêm `<package name="...">`).
+- Mỗi `<file>` chứa `<class name="..." namespace="...">`, các `<line num type name count>` và một `<metrics>` con trực tiếp ở cuối file.
+- Không có thẻ `<method>` riêng: method là `<line type="method" name="TenMethod" count="...">` (count lớn hơn 0 là đã cover). Statement là `<line type="stmt" count="...">`.
+- Tỉ lệ file nằm ở `<metrics statements coveredstatements methods coveredmethods>` là thẻ con trực tiếp của `<file>`.
+- PCOV chỉ cho line coverage; muốn branch/path coverage phải dùng Xdebug.
+
 Xem tổng quan metrics:
 
 ```bash
 grep -o '<metrics[^>]*>' clover.xml | head -n 5
 ```
 
-Lọc metrics của 1 file cụ thể:
+Lọc metrics của 1 file cụ thể (dùng thẻ con trực tiếp `/metrics` để tránh trùng metrics cấp `<class>`):
 
 ```bash
 grep -A2 'name=".*OrderService.php"' clover.xml
-php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[@name][contains(@name,\"OrderService.php\")]//metrics") as $m) { echo $m->asXML(), PHP_EOL; }'
+php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"OrderService.php\")]/metrics") as $m) { echo $m->asXML(), PHP_EOL; }'
 ```
 
 Liệt kê dòng chưa cover (count=0) trong file đổi:
 
 ```bash
-php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"OrderService.php\")]//line[@count=\"0\"]") as $l) { echo $l["num"], ":", $l["type"], PHP_EOL; }'
+php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"OrderService.php\")]/line[@count=\"0\"]") as $l) { echo $l["num"], ":", $l["type"], PHP_EOL; }'
 ```
 
-Tính phần trăm statements của 1 file:
+Liệt kê trạng thái cover từng method trong file đổi (method là line type=method):
 
 ```bash
-php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"OrderService.php\")]//metrics") as $m) { $s=(int)$m["statements"]; $c=(int)$m["coveredstatements"]; printf("statements=%d covered=%d pct=%.1f%%\n", $s, $c, $s ? $c*100/$s : 100); }'
+php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"OrderService.php\")]/line[@type=\"method\"]") as $l) { $c = (int)$l["count"]; printf("%s count=%d %s\n", $l["name"], $c, $c > 0 ? "COVERED" : "UNCOVERED"); }'
+```
+
+Tính phần trăm statements của 1 file (chỉ đọc metrics cấp file):
+
+```bash
+php -r '$x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"OrderService.php\")]/metrics") as $m) { $s=(int)$m["statements"]; $c=(int)$m["coveredstatements"]; printf("statements=%d covered=%d pct=%.1f%%\n", $s, $c, $s ? $c*100/$s : 100); }'
+```
+
+Tính phần trăm statements của 1 method cụ thể (đếm các line type=stmt từ method đó đến method kế tiếp, ví dụ method calculateTotal):
+
+```bash
+php -r '$f = "OrderService.php"; $target = "calculateTotal"; $x = simplexml_load_file("clover.xml"); foreach ($x->xpath("//file[contains(@name,\"" . $f . "\")]") as $file) { $in = false; $s = 0; $c = 0; $miss = []; foreach ($file->line as $l) { if ((string)$l["type"] === "method") { if ($in) { break; } if ((string)$l["name"] === $target) { $in = true; } } elseif ($in && (string)$l["type"] === "stmt") { $s++; if ((int)$l["count"] > 0) { $c++; } else { $miss[] = (int)$l["num"]; } } } printf("method=%s statements=%d covered=%d pct=%.1f%%\n", $target, $s, $c, $s ? $c*100/$s : 100); if ($miss) { echo "uncovered lines: " . implode(",", $miss) . PHP_EOL; } }'
 ```
 
 ## 6. Mở báo cáo HTML để tương tác
