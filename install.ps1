@@ -35,6 +35,17 @@ try {
     & $bootstrapScript
 }
 finally {
-    if (Test-Path $zipFile) { Remove-Item -Force $zipFile -ErrorAction SilentlyContinue }
-    if (Test-Path $tempBase) { Remove-Item -Recurse -Force $tempBase -ErrorAction SilentlyContinue }
+    Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
+    function Safe-Trash($p) {
+        if ($p -and (Test-Path $p)) {
+            if (Get-Command "trash" -ErrorAction SilentlyContinue) {
+                trash $p
+            } else {
+                try { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin') } catch {}
+                try { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin') } catch {}
+            }
+        }
+    }
+    Safe-Trash $zipFile
+    Safe-Trash $tempBase
 }

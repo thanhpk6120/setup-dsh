@@ -83,6 +83,9 @@ try {
     if (-not $yamlRaw.Contains("CONTEXT7_API_KEY: MOCK_CONTEXT7_KEY")) {
         throw "ASSERTION FAILED: cordis.patch.yml did not replace CONTEXT7_API_KEY correctly"
     }
+    if (-not $yamlRaw.Contains("serverName: glab")) {
+        throw "ASSERTION FAILED: cordis.patch.yml is missing glab mcp entry"
+    }
     
     if (-not (Test-Path $tempCreds)) {
         throw "ASSERTION FAILED: Missing generated credentials file: $tempCreds"
@@ -119,10 +122,20 @@ try {
     Write-Host "TEST PASSED: DSH bootstrap created valid configs." -ForegroundColor Green
 }
 finally {
-
+    Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
+    function Safe-Trash($p) {
+        if ($p -and (Test-Path $p)) {
+            if (Get-Command "trash" -ErrorAction SilentlyContinue) {
+                trash $p
+            } else {
+                try { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin') } catch {}
+                try { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin') } catch {}
+            }
+        }
+    }
     $env:Path = $oldPath
-    if ($mockBinDir -and (Test-Path $mockBinDir)) { Remove-Item -Recurse -Force $mockBinDir -ErrorAction SilentlyContinue }
-    if ($mockNpmDir -and (Test-Path $mockNpmDir)) { Remove-Item -Recurse -Force $mockNpmDir -ErrorAction SilentlyContinue }
+    Safe-Trash $mockBinDir
+    Safe-Trash $mockNpmDir
     Remove-Item function:global:npm -ErrorAction SilentlyContinue
 
     Remove-Item env:AI_BASE_URL -ErrorAction SilentlyContinue
@@ -133,8 +146,8 @@ finally {
     Remove-Item env:CONFLUENCE_URL -ErrorAction SilentlyContinue
     Remove-Item env:CONFLUENCE_PERSONAL_TOKEN -ErrorAction SilentlyContinue
     Remove-Item env:CONTEXT7_API_KEY -ErrorAction SilentlyContinue
-    if ($tempHome -and (Test-Path $tempHome)) { Remove-Item -Recurse -Force $tempHome }
-    if ($tempProfile -and (Test-Path $tempProfile)) { Remove-Item -Recurse -Force $tempProfile }
-    if ($tempProfile2 -and (Test-Path $tempProfile2)) { Remove-Item -Recurse -Force $tempProfile2 }
-    if ($tempCredsDir -and (Test-Path $tempCredsDir)) { Remove-Item -Recurse -Force $tempCredsDir }
+    Safe-Trash $tempHome
+    Safe-Trash $tempProfile
+    Safe-Trash $tempProfile2
+    Safe-Trash $tempCredsDir
 }

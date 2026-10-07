@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # Load-Env: read .env at $PSScriptRoot and set into [Environment] (process scope).
 $dotEnvPath = Join-Path $PSScriptRoot ".env"
@@ -43,7 +44,8 @@ function Get-EnvOrPrompt {
 
     $hasDefault = $PSBoundParameters.ContainsKey('DefaultValue') -or -not [string]::IsNullOrWhiteSpace($DefaultValue)
     while ($true) {
-        $promptStr = if ($hasDefault) { "$PromptMessage [$DefaultValue]" } elseif ($AllowEmpty) { "$PromptMessage (leave empty for none)" } else { $PromptMessage }
+        $promptStr = $PromptMessage
+        if ($hasDefault) { $promptStr = "$PromptMessage [$DefaultValue]" } elseif ($AllowEmpty) { $promptStr = "$PromptMessage (leave empty for none)" }
         try {
             $inputVal = Read-Host $promptStr
         } catch {
@@ -72,7 +74,7 @@ foreach ($tool in @("node", "npm", "git")) {
     }
 }
 
-$nodeVerRaw = (node -v).Trim()
+$nodeVerRaw = (node -v 2>$null | Out-String).Trim()
 try {
     $nodeVer = [version]($nodeVerRaw.TrimStart('v'))
 } catch {
@@ -356,7 +358,8 @@ function Get-CloakBrowserInstallDir {
 
     $defaultDrive = $drives | Where-Object { ($_.DeviceID -eq 'D:' -or $_.Name -eq 'D') } | Select-Object -First 1
     if (-not $defaultDrive) { $defaultDrive = $drives[0] }
-    $defaultLetter = if ($defaultDrive.DeviceID) { $defaultDrive.DeviceID } else { "$($defaultDrive.Name):" }
+    $defaultLetter = ""
+    if ($defaultDrive.DeviceID) { $defaultLetter = $defaultDrive.DeviceID } else { $defaultLetter = "$($defaultDrive.Name):" }
 
     if ([Environment]::GetEnvironmentVariable("CI") -or -not [Environment]::UserInteractive) {
         return "$defaultLetter\mcp-servers\cloakbrowser"
@@ -365,10 +368,15 @@ function Get-CloakBrowserInstallDir {
     Write-Host "`n==> Quet danh sach o dia (Local Drives) de cai dat CloakBrowser MCP:" -ForegroundColor Cyan
     for ($i = 0; $i -lt $drives.Count; $i++) {
         $d = $drives[$i]
-        $devId = if ($d.DeviceID) { $d.DeviceID } else { "$($d.Name):" }
-        $volName = if ($d.VolumeName) { " ($($d.VolumeName))" } else { "" }
-        $freeGB = [math]::Round(((if ($d.FreeSpace) { $d.FreeSpace } else { $d.Free }) / 1GB), 2)
-        $sizeGB = if ($d.Size) { [math]::Round(($d.Size / 1GB), 2) } else { "N/A" }
+        $devId = ""
+        if ($d.DeviceID) { $devId = $d.DeviceID } else { $devId = "$($d.Name):" }
+        $volName = ""
+        if ($d.VolumeName) { $volName = " ($($d.VolumeName))" }
+        $freeVal = $d.Free
+        if ($d.FreeSpace) { $freeVal = $d.FreeSpace }
+        $freeGB = [math]::Round(($freeVal / 1GB), 2)
+        $sizeGB = "N/A"
+        if ($d.Size) { $sizeGB = [math]::Round(($d.Size / 1GB), 2) }
         Write-Host "  [$($i+1)] O $devId$volName | Trong: $freeGB GB / $sizeGB GB"
     }
 
@@ -380,7 +388,8 @@ function Get-CloakBrowserInstallDir {
             $idx = 0
             if ([int]::TryParse($choice, [ref]$idx) -and $idx -ge 1 -and $idx -le $drives.Count) {
                 $chosen = $drives[$idx - 1]
-                $chosenLetter = if ($chosen.DeviceID) { $chosen.DeviceID } else { "$($chosen.Name):" }
+                $chosenLetter = ""
+                if ($chosen.DeviceID) { $chosenLetter = $chosen.DeviceID } else { $chosenLetter = "$($chosen.Name):" }
                 return "$chosenLetter\mcp-servers\cloakbrowser"
             }
         }
@@ -432,8 +441,10 @@ $gitlabToken = Get-EnvOrPrompt -EnvName "GITLAB_TOKEN" -PromptMessage "GitLab Pe
 
 if (-not [string]::IsNullOrWhiteSpace($gitlabToken) -and -not $DryRun) {
     Write-Host "==> Configuring GitLab authentication for host '$gitlabHost'..." -ForegroundColor Cyan
-    $proto = if ($gitlabHost -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' -or $gitlabHost -match ':80') { "http" } else { "https" }
-    $glabCmd = if (Get-Command "glab" -ErrorAction SilentlyContinue) { "glab" } elseif (Test-Path "$env:LOCALAPPDATA\Programs\glab\glab.exe") { "$env:LOCALAPPDATA\Programs\glab\glab.exe" } else { "glab" }
+    $proto = "https"
+    if ($gitlabHost -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' -or $gitlabHost -match ':80') { $proto = "http" }
+    $glabCmd = "glab"
+    if (Get-Command "glab" -ErrorAction SilentlyContinue) { $glabCmd = "glab" } elseif (Test-Path "$env:LOCALAPPDATA\Programs\glab\glab.exe") { $glabCmd = "$env:LOCALAPPDATA\Programs\glab\glab.exe" }
     try {
         & $glabCmd config set api_protocol $proto -g --host $gitlabHost 2>$null
         $tokenSec = $gitlabToken.Trim()
@@ -448,7 +459,7 @@ if (-not [string]::IsNullOrWhiteSpace($gitlabToken) -and -not $DryRun) {
 $gitnexusConfig = ""
 $gitnexusBin = Get-Command "gitnexus" -ErrorAction SilentlyContinue
 if ($gitnexusBin -and $gitnexusBin.Source) {
-    $gnPath = $gitnexusBin.Source -replace '\\', '\\'
+    $gnPath = $gitnexusBin.Source.Replace('\', '\\')
     $gitnexusConfig = @"
     command: cmd
     args:
@@ -469,7 +480,7 @@ try {
         $ctxJsPath = Join-Path $npmGlobalRoot "@upstash\context7-mcp\dist\index.js"
         if (Test-Path $ctxJsPath) {
             $context7Detected = $true
-            $c7Path = $ctxJsPath -replace '\\', '\\'
+            $c7Path = $ctxJsPath.Replace('\', '\\')
             $context7Config = @"
     command: node
     args:
@@ -510,7 +521,7 @@ if (Test-Path $targetPath) {
 } else {
     Write-Host "  -> Creating $targetPath" -ForegroundColor Green
     if (-not $DryRun) {
-        Set-Content -Path $targetPath -Value $cordisYaml -Encoding UTF8
+        [System.IO.File]::WriteAllText($targetPath, $cordisYaml, [System.Text.UTF8Encoding]::new($false))
     }
 }
 
@@ -554,11 +565,11 @@ if (-not $DryRun -and -not [string]::IsNullOrWhiteSpace($aiApiKey)) {
         } else {
             $credRaw = $credRaw.TrimEnd() + "`nrefs:`n  ANTHROPIC_API_KEY: $aiApiKey`n"
         }
-        Set-Content -Path $CredentialsPath -Value $credRaw -Encoding UTF8
+        [System.IO.File]::WriteAllText($CredentialsPath, $credRaw, [System.Text.UTF8Encoding]::new($false))
         Write-Host "  -> Updated ANTHROPIC_API_KEY in $CredentialsPath" -ForegroundColor Green
     } else {
         $credNew = "version: 1`nrecords: {}`nrefs:`n  ANTHROPIC_API_KEY: $aiApiKey`n"
-        Set-Content -Path $CredentialsPath -Value $credNew -Encoding UTF8
+        [System.IO.File]::WriteAllText($CredentialsPath, $credNew, [System.Text.UTF8Encoding]::new($false))
         Write-Host "  -> Created $CredentialsPath" -ForegroundColor Green
     }
 } elseif ([string]::IsNullOrWhiteSpace($aiApiKey)) {
