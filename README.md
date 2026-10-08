@@ -1,11 +1,14 @@
 # setup-deepseek-harness
 
-Script bootstrap thiết lập môi trường và cấu hình cho DeepSeek Harness (DSH Desktop / Web profile) trên máy mới, tương tự như setup của `.omp`. Default AI Base URL sử dụng `http://localhost:20128/v1`.
+Script bootstrap thiết lập môi trường và cấu hình cho DeepSeek Harness (DSH Desktop / Web profile) trên máy mới, bám sát tài liệu chính thức của từng nhà cung cấp MCP. Default AI Base URL sử dụng `http://localhost:20128/v1`.
 
-## Cấu hình sinh ra (`cordis.patch.yml`)
+## Cấu hình sinh ra (`cordis.patch.yml` & `.credentials.yaml`)
 
-File cấu hình `cordis.patch.yml` được đặt vào thư mục profile của DSH:
-`%APPDATA%\dsh-desktop\harness\profiles\web\cordis.patch.yml`
+File cấu hình được đặt vào thư mục profile của DSH:
+- `%APPDATA%\dsh-desktop\harness\profiles\web\cordis.patch.yml`
+- `%APPDATA%\dsh-desktop\harness\.credentials.yaml`
+- `%USERPROFILE%\.dsh\AGENTS.md`
+- `%USERPROFILE%\.dsh\skills\`
 
 1. **LLM Provider**: Trỏ về 9router với 4 models chính:
    - `claude-fable-5`
@@ -14,12 +17,66 @@ File cấu hình `cordis.patch.yml` được đặt vào thư mục profile củ
    - `claude-sonnet-5`
 2. **Subagent Models**: Cấp quyền đầy đủ cho subagent sử dụng cả 4 models trên.
 3. **Danh sách MCP Servers tích hợp**:
-   - **memorix**: Lệnh `memorix serve --mode lite`
-   - **gitnexus**: Đường dẫn cmd tuyệt đối trỏ tới bin cài global
-   - **company-atlassian**: Pinned version qua `uvx --from mcp-atlassian==0.23.1 mcp-atlassian`
-   - **context7**: Lệnh node trỏ file index.js cài global của `@upstash/context7-mcp`
-   - **cloakbrowser**: Hỗ trợ quét danh sách ổ đĩa và cho phép chọn vị trí lưu trữ (mặc định D:, C:), tự động kiểm tra và bảo toàn dữ liệu profile cũ nếu thư mục nguồn và mã nguồn đã tồn tại.
-  
+   - **gitnexus**: Lệnh cmd trỏ tới bin cài global (`cmd /c <path>\gitnexus mcp`). Yêu cầu Node.js >= 22.18.0.
+   - **company-atlassian**: Pinned version qua `uvx --from mcp-atlassian==0.23.1 mcp-atlassian`.
+   - **context7**: Lệnh node trỏ file `dist/index.js` cài global của `@upstash/context7-mcp`. Yêu cầu Node.js >= 22.18.0.
+   - **glab**: Lệnh `glab mcp serve`.
+   - **cloakbrowser**: Quét danh sách ổ đĩa và cho phép chọn vị trí lưu trữ (mặc định D:, C:), tự động kiểm tra và bảo toàn dữ liệu profile cũ nếu thư mục nguồn và mã nguồn đã tồn tại.
+   - **memorix** (Tùy chọn / Optional): Cung cấp tính năng Session Memory & MCP server cho DSH (`memorix serve --mode lite`). Mặc định **không cài đặt** để tối ưu hiệu năng và giữ System Prompt sạch sẽ.
+
+---
+
+## Quy tắc an toàn: Không xóa vĩnh viễn (Recycle Bin / Safe-Trash)
+
+Hệ thống tuân thủ nghiêm ngặt quy tắc an toàn dữ liệu:
+- **TUYỆT ĐỐI KHÔNG XÓA VĨNH VIỄN:** Mọi thao tác dọn dẹp file tạm, gỡ bỏ gói cũ hoặc xóa tệp tin đều bắt buộc phải chuyển vào Thùng rác (Recycle Bin / Trash) qua API .NET `Microsoft.VisualBasic.FileIO.FileSystem::DeleteDirectory` / `DeleteFile` với tùy chọn `SendToRecycleBin`.
+- Hệ thống kích hoạt hook bảo vệ `Setup-TrashGuard` trong phiên làm việc để chặn hoàn toàn hành vi xóa cứng.
+
+---
+
+## Cài đặt nhanh (1 dòng lệnh duy nhất)
+
+Mở PowerShell trên máy mới và chạy trực tiếp lệnh duy nhất sau:
+
+```powershell
+irm https://raw.githubusercontent.com/thanhpk6120/setup-dsh/main/install.ps1 | iex
+```
+
+### Quy trình cài đặt tương tác (Interactive Setup Flow)
+
+Script cài đặt sẽ tự động điều phối toàn bộ quá trình:
+
+1. **Kiểm tra và cài đặt DSH CLI**:
+   - Tự động kiểm tra binary/lệnh `dsh` trong biến môi trường `PATH`.
+   - Nếu chưa cài đặt, script sẽ nhận diện terminal và hỏi:
+     `DSH CLI chưa được cài đặt. Bạn có muốn cài đặt chính gốc ngay bây giờ không? [Y/n]: `
+   - Khi xác nhận (nhấn Enter hoặc 'Y'), script tự động thực thi cài đặt chính gốc, đồng thời nạp lại ngay `PATH` cho session hiện tại mà không cần mở lại terminal.
+
+2. **Cấu hình kết nối AI Provider**:
+   - Hỏi **AI Base URL** (Mặc định: `http://localhost:20128/v1`): Nhấn Enter để chọn mặc định hoặc nhập URL mới.
+   - Hỏi **AI API Key** (Bắt buộc): Bắt buộc nhập khi được hỏi (không có giá trị mặc định, kiểm tra lặp lại nếu để trống).
+   - Tự động lưu thông tin vào file `.env` tạm thời tại thư mục làm việc để các bước kế tiếp sử dụng.
+
+3. **Tùy chọn cài đặt Memorix (MCP & Session Memory)**:
+   - Script hỏi người dùng:
+     `Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]: `
+   - **Mặc định khi nhấn Enter hoặc N (Không cài đặt)**:
+     * Bỏ qua cài đặt package npm của Memorix và bỏ qua đăng ký hook Agent.
+     * Không đưa server Memorix vào file cấu hình `cordis.patch.yml`.
+     * Không cài đặt các kỹ năng `skills/memorix-*` vào Agent (nếu đã có từ trước thì chuyển vào Thùng rác).
+     * Giữ tài liệu `AGENTS.md` sạch sẽ, không chứa các chỉ dẫn Memorix để tiết kiệm token System Prompt.
+   - **Nếu chọn Yes (Y/y)**:
+     * Cài đặt package Memorix (`npm i -g memorix`) và đăng ký hook DSH (`memorix setup --agent dsh --global`).
+     * Tự động thêm MCP server `mcp-memorix` vào `cordis.patch.yml`.
+     * Cài đặt đầy đủ các kỹ năng Memorix vào `skills/` và tự động ghép phần hướng dẫn Memorix vào `AGENTS.md`.
+
+4. **Quản lý ghi đè và hợp nhất cấu hình (Overwrite / Merge / Skip)**:
+   - Quét các file cấu hình đích nếu đã tồn tại:
+     * Đối với `cordis.patch.yml`: Hỗ trợ xác nhận `[O]verwrite / [M]erge / [S]kip`. Khi chọn **[M]erge**, script sẽ tự động giữ lại các custom MCP servers của người dùng và hợp nhất với cấu hình mới từ template.
+     * Đối với `.credentials.yaml`: Hỗ trợ xác nhận `[O]verwrite / [S]kip`.
+   - Tự động tạo bản sao lưu `.bak` trước khi thực hiện ghi đè hoặc hợp nhất.
+   - Hỗ trợ tham số `-Force` hoặc `-OverwriteAll` để chạy tự động không cần hỏi lại.
+
 ---
 
 ## Hợp đồng hành vi & Nguyên tắc (Contract Updates)
@@ -28,41 +85,17 @@ Bộ script tuân thủ 7 hợp đồng nguyên tắc:
 1. **Evidence loop**: Không giả định kết quả; mọi thao tác cấu hình và tạo file đều có bước xác thực bằng chứng (evidence) qua test thực tế (`test-bootstrap.ps1`) trước khi kết luận hoàn tất.
 2. **MCP generic**: Cấu hình file `cordis.patch.yml` theo chuẩn generic mcpServers, loại bỏ schema cũ 404, tách biệt rõ ràng giữa config và runtime args.
 3. **Cloakbrowser + chọn ổ**: Hỗ trợ CloakBrowser MCP với tính năng quét danh sách ổ đĩa và cho phép chọn ổ đĩa cài đặt (mặc định D:, C:), bảo toàn mã nguồn và profile cũ nếu đã có.
-4. **uv mcp-atlassian**: Quản lý cài đặt/cập nhật `mcp-atlassian` qua `uv tool install mcp-atlassian==0.23.1 --upgrade`.
-5. **Overwrite (Ghi đè an toàn)**: Không ghi đè các file config cá nhân (`cordis.patch.yml`) nếu đã tồn tại; luôn ghi đè (`overwrite`) các file quy tắc (`AGENTS.md`) và thư mục `skills/` (vào `~/.dsh`) để đồng bộ mới nhất.
-6. **Reload-context**: Hỗ trợ workflow tải lại ngữ cảnh (`reload-context` / nạp lại rules, skills, agents) ngay sau khi cấu hình/tool cập nhật mà không cần khởi động lại toàn bộ session.
-7. **Cleanup skill**: Đồng bộ thư mục `skills/` giúp dọn dẹp các rule và skill lỗi thời hoặc thừa, giữ hệ sinh thái skill tinh gọn và chuẩn xác.
+4. **uv mcp-atlassian**: Quản lý cài đặt/cập nhật `mcp-atlassian` qua `uv tool install mcp-atlassian==0.23.1`.
+5. **Node.js >= 22.18.0 guard**: Kiểm tra version Node.js và ném ngoại lệ rõ ràng nếu không đạt điều kiện.
+6. **Separated Templates**: Toàn bộ các file mẫu cấu hình (`cordis.patch.yml`, `.credentials.yaml`, `memorix-agents-section.md`, `.env.example`) được tách riêng trong thư mục `templates/`, có cơ chế fallback chuỗi an toàn.
+7. **Safe-Trash & Recycle Bin**: 100% các thao tác dọn dẹp và xóa tệp tạm đều sử dụng Recycle Bin, cấm triệt để xóa vĩnh viễn.
 
 ---
 
-## Cài đặt nhanh (1 dòng lệnh duy nhất)
+## Kiểm thử tự động (Evidence Loop)
 
-Mở PowerShell trên máy mới và chạy:
-
-```powershell
-$env:AI_BASE_URL = "http://localhost:20128/v1"
-irm https://raw.githubusercontent.com/thanhpk6120/setup-dsh/main/install.ps1 | iex
-```
-
----
-
-## Chạy thủ công từ repo
-
-## Chạy bootstrap
+Chạy bộ test kiểm tra toàn bộ luồng bootstrap:
 
 ```powershell
-# Chạy cài đặt đầy đủ (yêu cầu Node.js, npm, git)
-.\bootstrap.ps1
-
-# Dry-run xem trước thay đổi (không ghi file)
-.\bootstrap.ps1 -DryRun
-
-# Bỏ qua bước cài đặt runtime (chỉ tạo file config)
-.\bootstrap.ps1 -SkipInstall
-```
-
-## Chạy kiểm tra
-
-```powershell
-.\test-bootstrap.ps1
+powershell -ExecutionPolicy Bypass -File .\test-bootstrap.ps1
 ```
