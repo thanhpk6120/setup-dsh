@@ -17,8 +17,13 @@ $ErrorActionPreference = "Stop"
 
 # 1. Xử lý tùy chọn Memorix
 if (-not $PSBoundParameters.ContainsKey('EnableMemorix') -and -not $PSBoundParameters.ContainsKey('DisableMemorix')) {
-    $memorixChoice = Read-Host "Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]"
-    $EnableMemorix = if (-not [string]::IsNullOrWhiteSpace($memorixChoice) -and $memorixChoice.Trim().ToLower() -eq 'y') { $true } else { $false }
+    if (Get-Command "memorix" -ErrorAction SilentlyContinue) {
+        Write-Host "==> Đã phát hiện Memorix CLI trong hệ thống. Tự động kích hoạt và cập nhật lên phiên bản mới nhất..." -ForegroundColor Green
+        $EnableMemorix = $true
+    } else {
+        $memorixChoice = Read-Host "Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]"
+        $EnableMemorix = if (-not [string]::IsNullOrWhiteSpace($memorixChoice) -and $memorixChoice.Trim().ToLower() -eq 'y') { $true } else { $false }
+    }
 } elseif ($DisableMemorix.IsPresent) {
     $EnableMemorix = $false
 } else {
@@ -126,8 +131,8 @@ if (-not $SkipInstall) {
 
 # 4. Quản lý cài đặt gói Memorix theo lựa chọn
 if ($EnableMemorix) {
-    if (-not $SkipInstall -and -not (Get-Command "memorix" -ErrorAction SilentlyContinue)) {
-        Write-Host "==> Đang cài đặt memorix globally qua npm..." -ForegroundColor Cyan
+    if (-not $SkipInstall) {
+        Write-Host "==> Đang cài đặt/cập nhật memorix lên phiên bản mới nhất qua npm..." -ForegroundColor Cyan
         if (-not $DryRun) {
             npm install -g memorix --silent
         }

@@ -4,6 +4,8 @@ $ErrorActionPreference = "Stop"
 $tempHome = Join-Path $env:TEMP ("dsh-home-test-" + [System.Guid]::NewGuid().ToString("N"))
 $tempProfile = Join-Path $env:TEMP ("dsh-profile-test-" + [System.Guid]::NewGuid().ToString("N"))
 $tempProfile2 = $null
+$tempProfileAuto = $null
+$tempHomeAuto = $null
 $tempCredsDir = Join-Path $env:TEMP ("dsh-creds-test-" + [System.Guid]::NewGuid().ToString("N"))
 $tempCreds = Join-Path $tempCredsDir ".credentials.yaml"
 
@@ -19,6 +21,7 @@ $env:CONTEXT7_API_KEY = "MOCK_CONTEXT7_KEY"
 $mockBinDir = Join-Path $env:TEMP ("dsh-mock-bin-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $mockBinDir | Out-Null
 Set-Content -Path (Join-Path $mockBinDir "gitnexus.cmd") -Value "@echo off`necho gitnexus"
+Set-Content -Path (Join-Path $mockBinDir "memorix.cmd") -Value "@echo off`necho memorix"
 $oldPath = $env:Path
 $env:Path = "$mockBinDir;$env:Path"
 
@@ -138,7 +141,34 @@ try {
     Write-Host "  => TEST 2 PASSED!" -ForegroundColor Green
 
     Write-Host "`n================================================================" -ForegroundColor Cyan
-    Write-Host " [TEST 3] Verify old Memorix skill cleanup via Safe-Trash" -ForegroundColor Cyan
+    Write-Host " [TEST 3] Auto-detect Memorix when CLI exists without flags" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    $tempProfileAuto = Join-Path $env:TEMP ("dsh-profile-auto-" + [System.Guid]::NewGuid().ToString("N"))
+    $tempHomeAuto = Join-Path $env:TEMP ("dsh-home-auto-" + [System.Guid]::NewGuid().ToString("N"))
+    & "$PSScriptRoot\bootstrap.ps1" -DryRun:$false -SkipInstall -Force -DshHome $tempHomeAuto -DshProfileDir $tempProfileAuto -CredentialsPath $tempCreds
+
+    $pathAuto = Join-Path $tempProfileAuto "cordis.patch.yml"
+    $yamlRawAuto = Get-Content $pathAuto -Raw
+    if (-not $yamlRawAuto.Contains("mcp-memorix")) {
+        throw "ASSERTION FAILED: mcp-memorix is missing in cordis.patch.yml when Memorix CLI is auto-detected"
+    }
+    if (-not $yamlRawAuto.Contains("command: memorix")) {
+        throw "ASSERTION FAILED: command: memorix is missing when Memorix CLI is auto-detected"
+    }
+
+    $agentsContentAuto = Get-Content (Join-Path $tempHomeAuto "AGENTS.md") -Raw
+    if (-not $agentsContentAuto.Contains("# Memorix")) {
+        throw "ASSERTION FAILED: AGENTS.md does not contain Memorix instructions when Memorix CLI is auto-detected"
+    }
+
+    $skillsAutoDir = Join-Path $tempHomeAuto "skills"
+    if (-not (Test-Path (Join-Path $skillsAutoDir "memorix-memory"))) {
+        throw "ASSERTION FAILED: memorix-memory skill was not copied when Memorix CLI is auto-detected"
+    }
+    Write-Host "  => TEST 3 PASSED!" -ForegroundColor Green
+
+    Write-Host "`n================================================================" -ForegroundColor Cyan
+    Write-Host " [TEST 4] Verify old Memorix skill cleanup via Safe-Trash" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     $dummySkillDir = Join-Path $targetSkillsPath "memorix-troubleshooting"
     New-Item -ItemType Directory -Force -Path $dummySkillDir | Out-Null
@@ -151,10 +181,10 @@ try {
     if (Test-Path $dummySkillDir) {
         throw "ASSERTION FAILED: Dummy skill memorix-troubleshooting was not cleaned up when Memorix disabled"
     }
-    Write-Host "  => TEST 3 PASSED!" -ForegroundColor Green
+    Write-Host "  => TEST 4 PASSED!" -ForegroundColor Green
 
     Write-Host "`n================================================================" -ForegroundColor Cyan
-    Write-Host " [TEST 4] Verify YAML configuration Merge (cordis.patch.yml)" -ForegroundColor Cyan
+    Write-Host " [TEST 5] Verify YAML configuration Merge (cordis.patch.yml)" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     $customServerYaml = "- id: mcp-my-custom-db`r`n  name: `"@deepseek-ai/dsh-mcp-client`"`r`n  config:`r`n    serverName: my-custom-db`r`n    transport: stdio"
     $existingYaml = $yamlRaw + "`r`n" + $customServerYaml
@@ -169,10 +199,10 @@ try {
     if (-not $merged.Contains("serverName: gitnexus")) {
         throw "ASSERTION FAILED: Standard MCP servers were lost after Merge"
     }
-    Write-Host "  => TEST 4 PASSED!" -ForegroundColor Green
+    Write-Host "  => TEST 5 PASSED!" -ForegroundColor Green
 
     Write-Host "`n================================================================" -ForegroundColor Cyan
-    Write-Host " [TEST 5] Verify templates/ Fallback mechanism" -ForegroundColor Cyan
+    Write-Host " [TEST 6] Verify templates/ Fallback mechanism" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     $fallbackTest = Get-TemplateContent -TemplateName "non-existent-template.xyz" -FallbackContent "FALLBACK_SUCCESS_OK"
     if ($fallbackTest -ne "FALLBACK_SUCCESS_OK") {
@@ -183,10 +213,10 @@ try {
     if ($existingTemplateTest -eq "FAIL" -or -not $existingTemplateTest.Contains("id: permission")) {
         throw "ASSERTION FAILED: Get-TemplateContent failed to load cordis.patch.yml from templates/"
     }
-    Write-Host "  => TEST 5 PASSED!" -ForegroundColor Green
+    Write-Host "  => TEST 6 PASSED!" -ForegroundColor Green
 
     Write-Host "`n================================================================" -ForegroundColor Cyan
-    Write-Host " [TEST 6] Verify Safe-Trash with temp file and directory" -ForegroundColor Cyan
+    Write-Host " [TEST 7] Verify Safe-Trash with temp file and directory" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
     $trashTestDir = Join-Path $env:TEMP ("dsh-trash-test-dir-" + [System.Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $trashTestDir | Out-Null
@@ -202,7 +232,7 @@ try {
     if (Test-Path $trashTestDir) {
         throw "ASSERTION FAILED: Sample directory still exists after Safe-Trash"
     }
-    Write-Host "  => TEST 6 PASSED!" -ForegroundColor Green
+    Write-Host "  => TEST 7 PASSED!" -ForegroundColor Green
 
     Write-Host "`n================================================================" -ForegroundColor Green
     Write-Host "        ALL DSH BOOTSTRAP ASSERTION TESTS PASSED!               " -ForegroundColor Green
@@ -228,6 +258,8 @@ finally {
     if ($tempProfile2) { Cleanup-Trash $tempProfile2 }
     if ($tempProfileMem) { Cleanup-Trash $tempProfileMem }
     if ($tempHomeMem) { Cleanup-Trash $tempHomeMem }
+    if ($tempProfileAuto) { Cleanup-Trash $tempProfileAuto }
+    if ($tempHomeAuto) { Cleanup-Trash $tempHomeAuto }
     Cleanup-Trash $tempCredsDir
     Cleanup-Trash $mockBinDir
     Cleanup-Trash $mockNpmDir

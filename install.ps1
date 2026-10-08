@@ -75,7 +75,7 @@ if ($env:AI_API_KEY -and -not [string]::IsNullOrWhiteSpace($env:AI_API_KEY)) {
     }
 }
 
-# 3. Hỏi tương tác cài đặt Memorix (Mặc định: Không cài)
+# 3. Hỏi tương tác cài đặt Memorix (Mặc định: Tự động kích hoạt nếu đã có CLI, hoặc hỏi người dùng)
 Write-Host ""
 Write-Host "==> Cấu hình tiện ích bổ sung..." -ForegroundColor Cyan
 if ($PSBoundParameters.ContainsKey('EnableMemorix')) {
@@ -83,8 +83,13 @@ if ($PSBoundParameters.ContainsKey('EnableMemorix')) {
 } elseif ($PSBoundParameters.ContainsKey('DisableMemorix')) {
     $enableMemorix = -not $DisableMemorix.IsPresent
 } else {
-    $memorixChoice = Read-Host "Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]"
-    $enableMemorix = if (-not [string]::IsNullOrWhiteSpace($memorixChoice) -and $memorixChoice.Trim().ToLower() -eq 'y') { $true } else { $false }
+    if (Get-Command "memorix" -ErrorAction SilentlyContinue) {
+        Write-Host "==> Đã phát hiện Memorix CLI trong hệ thống. Tự động kích hoạt và cập nhật lên phiên bản mới nhất..." -ForegroundColor Green
+        $enableMemorix = $true
+    } else {
+        $memorixChoice = Read-Host "Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]"
+        $enableMemorix = if (-not [string]::IsNullOrWhiteSpace($memorixChoice) -and $memorixChoice.Trim().ToLower() -eq 'y') { $true } else { $false }
+    }
 }
 
 $env:AI_BASE_URL = $aiBaseUrl
