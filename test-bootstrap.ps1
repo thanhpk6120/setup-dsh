@@ -30,6 +30,25 @@ $mockContext7Path = Join-Path $mockNpmDir "@upstash\context7-mcp\dist"
 New-Item -ItemType Directory -Force -Path $mockContext7Path | Out-Null
 Set-Content -Path (Join-Path $mockContext7Path "index.js") -Value "// mock"
 
+Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
+function Safe-Trash {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    if (Get-Command "trash" -ErrorAction SilentlyContinue) {
+        trash $Path
+        return
+    }
+    try {
+        if ([System.IO.Directory]::Exists($Path)) {
+            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($Path, 'OnlyErrorDialogs', 'SendToRecycleBin')
+        } elseif ([System.IO.File]::Exists($Path)) {
+            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($Path, 'OnlyErrorDialogs', 'SendToRecycleBin')
+        }
+    } catch {
+        Write-Warning "Không thể di chuyển '$Path' vào Thùng rác: $($_.Exception.Message)"
+    }
+}
+
 function global:npm {
     param([Parameter(ValueFromRemainingArguments)]$remaining)
     if ($remaining -contains "root" -and $remaining -contains "-g") {
@@ -40,7 +59,6 @@ function global:npm {
         & $realNpm @remaining
     }
 }
-
 try {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host " [TEST 1] Run DSH bootstrap with -DisableMemorix (default off)" -ForegroundColor Cyan
@@ -234,33 +252,66 @@ try {
     }
     Write-Host "  => TEST 7 PASSED!" -ForegroundColor Green
 
+    Write-Host "`n================================================================" -ForegroundColor Cyan
+    Write-Host " [TEST 8] Verify Setup-TrashGuard / global:Remove-Item are not defined" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    $bootstrapRaw = Get-Content -Path (Join-Path $PSScriptRoot "bootstrap.ps1") -Raw
+    if ($bootstrapRaw.Contains("function Setup-TrashGuard")) {
+        throw "ASSERTION FAILED: Setup-TrashGuard is still defined in bootstrap.ps1"
+    }
+    if ($bootstrapRaw.Contains("function global:Remove-Item")) {
+        throw "ASSERTION FAILED: global:Remove-Item is still overridden in bootstrap.ps1"
+    }
+    if (Get-Command "Remove-Item" -CommandType Function -ErrorAction SilentlyContinue) {
+        throw "ASSERTION FAILED: Remove-Item is defined as a function, polluting global scope"
+    }
+    Write-Host "  => TEST 8 PASSED!" -ForegroundColor Green
+
+    Write-Host "`n================================================================" -ForegroundColor Cyan
+    Write-Host " [TEST 9] Verify Non-Interactive guard for AI_API_KEY" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    $oldKey = $env:AI_API_KEY
+    $env:AI_API_KEY = ""
+    $tempHomeNonInt = Join-Path $env:TEMP ("dsh-home-nonint-" + [System.Guid]::NewGuid().ToString("N"))
+    $failedAsExpected = $false
+    try {
+        & "$PSScriptRoot\bootstrap.ps1" -DryRun -SkipInstall -Force -DisableMemorix -DshHome $tempHomeNonInt -DshProfileDir $tempProfile -CredentialsPath $tempCreds 2>$null
+    } catch {
+        $failedAsExpected = $true
+    } finally {
+        $env:AI_API_KEY = $oldKey
+        Safe-Trash $tempHomeNonInt
+    }
+    if (-not $failedAsExpected) {
+        throw "ASSERTION FAILED: bootstrap.ps1 should throw error when AI_API_KEY is missing in non-interactive mode"
+    }
+    Write-Host "  => TEST 9 PASSED!" -ForegroundColor Green
+
+    Write-Host "`n================================================================" -ForegroundColor Cyan
+    Write-Host " [TEST 10] Verify mcp-atlassian version check" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    if ($bootstrapRaw -notmatch '0\.23\.1') {
+        throw "ASSERTION FAILED: mcp-atlassian version check for 0.23.1 is missing in bootstrap.ps1"
+    }
+    if ($bootstrapRaw -notmatch 'mcp-atlassian\s+v?0\.23\.1') {
+        throw "ASSERTION FAILED: mcp-atlassian version pattern match is missing in bootstrap.ps1"
+    }
+    Write-Host "  => TEST 10 PASSED!" -ForegroundColor Green
+
     Write-Host "`n================================================================" -ForegroundColor Green
     Write-Host "        ALL DSH BOOTSTRAP ASSERTION TESTS PASSED!               " -ForegroundColor Green
     Write-Host "================================================================" -ForegroundColor Green
 }
 finally {
     $env:Path = $oldPath
-    Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
-    function Cleanup-Trash($p) {
-        if ($p -and (Test-Path -LiteralPath $p)) {
-            try {
-                if ([System.IO.Directory]::Exists($p)) {
-                    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
-                } elseif ([System.IO.File]::Exists($p)) {
-                    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
-                }
-            } catch {}
-        }
-    }
-
-    Cleanup-Trash $tempHome
-    Cleanup-Trash $tempProfile
-    if ($tempProfile2) { Cleanup-Trash $tempProfile2 }
-    if ($tempProfileMem) { Cleanup-Trash $tempProfileMem }
-    if ($tempHomeMem) { Cleanup-Trash $tempHomeMem }
-    if ($tempProfileAuto) { Cleanup-Trash $tempProfileAuto }
-    if ($tempHomeAuto) { Cleanup-Trash $tempHomeAuto }
-    Cleanup-Trash $tempCredsDir
-    Cleanup-Trash $mockBinDir
-    Cleanup-Trash $mockNpmDir
+    Safe-Trash -Path $tempHome
+    Safe-Trash -Path $tempProfile
+    if ($tempProfile2) { Safe-Trash -Path $tempProfile2 }
+    if ($tempProfileMem) { Safe-Trash -Path $tempProfileMem }
+    if ($tempHomeMem) { Safe-Trash -Path $tempHomeMem }
+    if ($tempProfileAuto) { Safe-Trash -Path $tempProfileAuto }
+    if ($tempHomeAuto) { Safe-Trash -Path $tempHomeAuto }
+    Safe-Trash -Path $tempCredsDir
+    Safe-Trash -Path $mockBinDir
+    Safe-Trash -Path $mockNpmDir
 }

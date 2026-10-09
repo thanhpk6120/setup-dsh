@@ -18,11 +18,16 @@ $ErrorActionPreference = "Stop"
 # 1. Xử lý tùy chọn Memorix
 if (-not $PSBoundParameters.ContainsKey('EnableMemorix') -and -not $PSBoundParameters.ContainsKey('DisableMemorix')) {
     if (Get-Command "memorix" -ErrorAction SilentlyContinue) {
-        Write-Host "==> Đã phát hiện Memorix CLI trong hệ thống. Tự động kích hoạt và cập nhật lên phiên bản mới nhất..." -ForegroundColor Green
+        Write-Host "==> Phát hiện Memorix đã được cài đặt trên hệ thống... Tự động kích hoạt và cập nhật lên phiên bản mới nhất..." -ForegroundColor Green
         $EnableMemorix = $true
     } else {
-        $memorixChoice = Read-Host "Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]"
-        $EnableMemorix = if (-not [string]::IsNullOrWhiteSpace($memorixChoice) -and $memorixChoice.Trim().ToLower() -eq 'y') { $true } else { $false }
+        $isNonInteractive = [Environment]::GetEnvironmentVariable("CI") -or (-not [Environment]::UserInteractive)
+        if ($isNonInteractive) {
+            $EnableMemorix = $false
+        } else {
+            $memorixChoice = Read-Host "Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]"
+            $EnableMemorix = if (-not [string]::IsNullOrWhiteSpace($memorixChoice) -and $memorixChoice.Trim().ToLower() -eq 'y') { $true } else { $false }
+        }
     }
 } elseif ($DisableMemorix.IsPresent) {
     $EnableMemorix = $false
@@ -60,25 +65,55 @@ function Safe-Trash {
     }
 }
 
-function Setup-TrashGuard {
-    function global:Remove-Item {
-        [CmdletBinding(SupportsShouldProcess = $true)]
-        param(
-            [Parameter(Position = 0, Mandatory = $true, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
-            [string[]]$Path,
-            [switch]$Recurse,
-            [switch]$Force
-        )
-        process {
-            foreach ($target in $Path) {
-                if (Test-Path -LiteralPath $target) {
-                    Safe-Trash -Path (Resolve-Path -LiteralPath $target).Path
+
+# 2.1 Kiểm tra DSH CLI đầu tiên
+Write-Host "==> Kiểm tra DSH CLI trong hệ thống..." -ForegroundColor Cyan
+$isNonInteractive = [Environment]::GetEnvironmentVariable("CI") -or (-not [Environment]::UserInteractive)
+
+$dshCmd = Get-Command "dsh" -ErrorAction SilentlyContinue
+if (-not $dshCmd) {
+    Write-Host "[!] DSH CLI chưa được cài đặt trong PATH." -ForegroundColor Yellow
+    $installChoice = "Y"
+    if (-not $isNonInteractive) {
+        $inputChoice = Read-Host "DSH CLI chưa được cài đặt. Bạn có muốn cài đặt DSH chính gốc ngay bây giờ không? [Y/n]"
+        if ($inputChoice) { $installChoice = $inputChoice.Trim() }
+    }
+    if ($installChoice -notmatch '^[nN]$') {
+        $terminalType = if ($PSVersionTable.PSEdition -eq "Core") { "PowerShell Core / pwsh" } else { "Windows PowerShell" }
+        Write-Host "==> Nhận diện terminal: $terminalType (PSVersion: $($PSVersionTable.PSVersion))." -ForegroundColor Cyan
+        Write-Host "==> Đang cài đặt DSH chính gốc từ nhà phát triển qua npm install -g deepseek-harness..." -ForegroundColor Cyan
+        if (-not $DryRun) {
+            try {
+                npm install -g deepseek-harness --silent
+                Write-Host "==> Cài đặt DSH CLI hoàn tất. Đang cập nhật PATH trong session hiện tại..." -ForegroundColor Green
+
+                # Cập nhật PATH trong phiên làm việc hiện tại
+                try {
+                    $userPath = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::User)
+                    $machinePath = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
+                    foreach ($p in ("$userPath;$machinePath" -split ';')) {
+                        if (-not [string]::IsNullOrWhiteSpace($p)) {
+                            if ($env:Path -notlike "*$p*") { $env:Path = "$p;$env:Path" }
+                        }
+                    }
+                } catch {}
+
+                $dshCmd = Get-Command "dsh" -ErrorAction SilentlyContinue
+                if ($dshCmd) {
+                    Write-Host "==> Đã cài đặt và nhận diện thành công DSH CLI tại: $($dshCmd.Source)" -ForegroundColor Green
+                } else {
+                    Write-Warning "Đã nạp lại PATH nhưng chưa nhận diện được lệnh 'dsh'. Nếu là ứng dụng Desktop, bạn có thể khởi chạy qua Start Menu."
                 }
+            } catch {
+                Write-Warning "Cài đặt DSH CLI tự động gặp lỗi: $($_.Exception.Message)"
             }
         }
+    } else {
+        Write-Host "==> Bỏ qua bước cài đặt DSH CLI." -ForegroundColor Yellow
     }
+} else {
+    Write-Host "==> Đã phát hiện DSH CLI tại: $($dshCmd.Source)" -ForegroundColor Green
 }
-Setup-TrashGuard
 
 # 3. Kiểm tra các công cụ runtime cơ bản
 Write-Host "==> Kiểm tra các công cụ runtime..." -ForegroundColor Cyan
@@ -118,10 +153,38 @@ if (-not $SkipInstall -and -not (Get-Command "uv" -ErrorAction SilentlyContinue)
 if (-not $SkipInstall) {
     if (-not $DryRun) {
         if (Get-Command "uv" -ErrorAction SilentlyContinue) {
+            # Kiểm tra mcp-atlassian v0.23.1 đã có sẵn trên máy
+            $hasAtlassian = $false
             try {
-                uv tool install mcp-atlassian==0.23.1 --force
-            } catch {
-                Write-Warning "Cài đặt mcp-atlassian gặp lỗi: $($_.Exception.Message)"
+                $uvList = (uv tool list 2>&1 | Out-String)
+                if ($uvList -match 'mcp-atlassian\s+v?0\.23\.1' -or $uvList -match 'mcp-atlassian') {
+                    $hasAtlassian = $true
+                }
+            } catch {}
+
+            $uvToolsPath = Join-Path $env:APPDATA "uv\tools\mcp-atlassian"
+            if (Test-Path $uvToolsPath) {
+                $hasAtlassian = $true
+            }
+            if (Get-Command "mcp-atlassian" -ErrorAction SilentlyContinue) {
+                $hasAtlassian = $true
+            }
+
+            if ($hasAtlassian) {
+                Write-Host "==> mcp-atlassian đã có sẵn trên máy. Bỏ qua cài đặt lại để tránh lỗi khóa file Windows (File Lock: os error 5)." -ForegroundColor Green
+            } else {
+                try {
+                    Write-Host "==> Cài đặt mcp-atlassian==0.23.1 qua uv tool..." -ForegroundColor Cyan
+                    $installOutput = (uv tool install mcp-atlassian==0.23.1 2>&1 | Out-String)
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warning "Cài đặt uv tool mcp-atlassian: $installOutput"
+                        Write-Host "==> Lưu ý: DSH chạy qua 'uvx --from mcp-atlassian==0.23.1' nên công cụ vẫn sẽ tự động tải và hoạt động bình thường." -ForegroundColor Cyan
+                    } else {
+                        Write-Host "==> Cài đặt mcp-atlassian thành công." -ForegroundColor Green
+                    }
+                } catch {
+                    Write-Warning "Cài đặt mcp-atlassian gặp lỗi khóa file: $($_.Exception.Message). DSH chạy qua 'uvx' nên vẫn hoạt động bình thường."
+                }
             }
         } else {
             Write-Warning "'uv' không khả dụng. Vui lòng cài đặt mcp-atlassian thủ công: uv tool install mcp-atlassian==0.23.1"
@@ -190,7 +253,10 @@ if (-not $SkipInstall -and -not (Get-Command "glab" -ErrorAction SilentlyContinu
 
 # 6. Đọc .env nếu có
 function Load-Env {
-    param([string]$EnvPath = (Join-Path $PSScriptRoot ".env"))
+    param([string]$EnvPath = (Join-Path $DshHome ".env"))
+    if (-not (Test-Path $EnvPath)) {
+        $EnvPath = Join-Path $PSScriptRoot ".env"
+    }
     if (Test-Path $EnvPath) {
         Write-Host "  -> Đang nạp cấu hình từ $EnvPath..." -ForegroundColor Cyan
         Get-Content $EnvPath | ForEach-Object {
@@ -228,6 +294,17 @@ function Get-EnvOrPrompt {
     if (-not [string]::IsNullOrWhiteSpace($val)) { return $val }
 
     $hasDefault = $PSBoundParameters.ContainsKey('Default')
+    $isNonInteractive = [Environment]::GetEnvironmentVariable("CI") -or (-not [Environment]::UserInteractive)
+    if ($isNonInteractive) {
+        if ($hasDefault) {
+            return $Default
+        }
+        if ($AllowEmpty) {
+            return ""
+        }
+        throw "Lỗi: '$EnvName' là bắt buộc trong môi trường non-interactive/CI nhưng chưa được thiết lập."
+    }
+
     while ($true) {
         $promptStr = $Prompt
         if ($hasDefault) { $promptStr = "$Prompt (Mặc định: $Default)" }
@@ -346,8 +423,29 @@ $confUrl   = Get-EnvOrPrompt -EnvName "CONFLUENCE_URL" -Prompt "Confluence URL" 
 $confToken = Get-EnvOrPrompt -EnvName "CONFLUENCE_PERSONAL_TOKEN" -Prompt "Confluence Personal Token" -Default "YOUR_CONFLUENCE_PERSONAL_TOKEN"
 $ctxKey    = Get-EnvOrPrompt -EnvName "CONTEXT7_API_KEY" -Prompt "Context7 API Key" -AllowEmpty
 $gitlabHost = Get-EnvOrPrompt -EnvName "GITLAB_HOST" -Prompt "GitLab Host" -Default "10.30.1.17"
-$gitlabToken = Get-EnvOrPrompt -EnvName "GITLAB_TOKEN" -Prompt "GitLab Token" -AllowEmpty
+$gitlabToken = Get-EnvOrPrompt -EnvName "GITLAB_TOKEN" -Prompt "GitLab Personal Token" -AllowEmpty
 
+# Lưu toàn bộ cấu hình đã thu thập vào .env tại thư mục DshHome để các phiên sau tái sử dụng
+$localEnvPath = Join-Path $DshHome ".env"
+if (-not (Test-Path $localEnvPath) -and -not $DryRun) {
+    $parentDir = Split-Path $localEnvPath -Parent
+    if (-not (Test-Path $parentDir)) {
+        New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+    }
+    $envSaveContent = @"
+AI_BASE_URL=$aiBaseUrl
+AI_API_KEY=$aiKey
+JIRA_URL=$jiraUrl
+JIRA_PERSONAL_TOKEN=$jiraToken
+CONFLUENCE_URL=$confUrl
+CONFLUENCE_PERSONAL_TOKEN=$confToken
+CONTEXT7_API_KEY=$ctxKey
+GITLAB_HOST=$gitlabHost
+GITLAB_TOKEN=$gitlabToken
+"@
+    Set-Content -Path $localEnvPath -Value $envSaveContent -Encoding UTF8
+    Write-Host "==> Đã lưu cấu hình hoàn chỉnh vào $localEnvPath" -ForegroundColor DarkGray
+}
 if (-not [string]::IsNullOrWhiteSpace($gitlabToken) -and -not $DryRun) {
     try {
         if (Get-Command "glab" -ErrorAction SilentlyContinue) {

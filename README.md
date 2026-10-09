@@ -30,8 +30,7 @@ File cấu hình được đặt vào thư mục profile của DSH:
 
 Hệ thống tuân thủ nghiêm ngặt quy tắc an toàn dữ liệu:
 - **TUYỆT ĐỐI KHÔNG XÓA VĨNH VIỄN:** Mọi thao tác dọn dẹp file tạm, gỡ bỏ gói cũ hoặc xóa tệp tin đều bắt buộc phải chuyển vào Thùng rác (Recycle Bin / Trash) qua API .NET `Microsoft.VisualBasic.FileIO.FileSystem::DeleteDirectory` / `DeleteFile` với tùy chọn `SendToRecycleBin`.
-- Hệ thống kích hoạt hook bảo vệ `Setup-TrashGuard` trong phiên làm việc để chặn hoàn toàn hành vi xóa cứng.
-
+- **KHÔNG CAN THIỆP MÔI TRƯỜNG TOÀN CỤC:** TUYỆT ĐỐI KHÔNG can thiệp vào `$PROFILE`, không sửa file shell (`.bashrc`), không set biến môi trường toàn cục, không ghi đè lệnh hệ thống `global:Remove-Item` để tránh ô nhiễm terminal cá nhân của người dùng. Mọi thao tác dọn dẹp nội bộ gọi trực tiếp hàm `Safe-Trash`.
 ---
 
 ## Cài đặt nhanh (1 dòng lệnh duy nhất)
@@ -58,18 +57,17 @@ Script cài đặt sẽ tự động điều phối toàn bộ quá trình:
    - Tự động lưu thông tin vào file `.env` tạm thời tại thư mục làm việc để các bước kế tiếp sử dụng.
 
 3. **Tùy chọn cài đặt Memorix (MCP & Session Memory)**:
-   - Script hỏi người dùng:
-     `Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]: `
-   - **Mặc định khi nhấn Enter hoặc N (Không cài đặt)**:
+   - **Tự động nhận diện (Smart Detection)**: Nếu hệ thống đã có sẵn `memorix` CLI, script sẽ tự động kích hoạt, in thông báo cập nhật và chạy cài đặt/hook mà không cần hỏi lại.
+   - **Nếu chưa cài đặt**: Script hỏi người dùng `Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]` (mặc định không cài).
+   - **Khi tắt (mặc định khi chưa có CLI và nhấn Enter/N)**:
      * Bỏ qua cài đặt package npm của Memorix và bỏ qua đăng ký hook Agent.
      * Không đưa server Memorix vào file cấu hình `cordis.patch.yml`.
-     * Không cài đặt các kỹ năng `skills/memorix-*` vào Agent (nếu đã có từ trước thì chuyển vào Thùng rác).
+     * Không cài đặt các kỹ năng `skills/memorix-*` vào Agent (nếu đã có từ trước thì chuyển vào Thùng rác qua `Safe-Trash`).
      * Giữ tài liệu `AGENTS.md` sạch sẽ, không chứa các chỉ dẫn Memorix để tiết kiệm token System Prompt.
-   - **Nếu chọn Yes (Y/y)**:
+   - **Khi bật (tự động hoặc chọn Y/y)**:
      * Cài đặt package Memorix (`npm i -g memorix`) và đăng ký hook DSH (`memorix setup --agent dsh --global`).
      * Tự động thêm MCP server `mcp-memorix` vào `cordis.patch.yml`.
      * Cài đặt đầy đủ các kỹ năng Memorix vào `skills/` và tự động ghép phần hướng dẫn Memorix vào `AGENTS.md`.
-
 4. **Quản lý ghi đè và hợp nhất cấu hình (Overwrite / Merge / Skip)**:
    - Quét các file cấu hình đích nếu đã tồn tại:
      * Đối với `cordis.patch.yml`: Hỗ trợ xác nhận `[O]verwrite / [M]erge / [S]kip`. Khi chọn **[M]erge**, script sẽ tự động giữ lại các custom MCP servers của người dùng và hợp nhất với cấu hình mới từ template.
@@ -81,15 +79,14 @@ Script cài đặt sẽ tự động điều phối toàn bộ quá trình:
 
 ## Hợp đồng hành vi & Nguyên tắc (Contract Updates)
 
-Bộ script tuân thủ 7 hợp đồng nguyên tắc:
-1. **Evidence loop**: Không giả định kết quả; mọi thao tác cấu hình và tạo file đều có bước xác thực bằng chứng (evidence) qua test thực tế (`test-bootstrap.ps1`) trước khi kết luận hoàn tất.
-2. **MCP generic**: Cấu hình file `cordis.patch.yml` theo chuẩn generic mcpServers, loại bỏ schema cũ 404, tách biệt rõ ràng giữa config và runtime args.
-3. **Cloakbrowser + chọn ổ**: Hỗ trợ CloakBrowser MCP với tính năng quét danh sách ổ đĩa và cho phép chọn ổ đĩa cài đặt (mặc định D:, C:), bảo toàn mã nguồn và profile cũ nếu đã có.
-4. **uv mcp-atlassian**: Quản lý cài đặt/cập nhật `mcp-atlassian` qua `uv tool install mcp-atlassian==0.23.1`.
-5. **Node.js >= 22.18.0 guard**: Kiểm tra version Node.js và ném ngoại lệ rõ ràng nếu không đạt điều kiện.
+Bộ script tuân thủ các nguyên tắc cốt lõi:
+1. **Evidence loop**: Mọi thao tác cấu hình và tạo file đều có bước xác thực bằng chứng qua test thực tế (`test-bootstrap.ps1`) đạt 100% pass trước khi kết luận hoàn tất.
+2. **MCP generic**: Cấu hình file `cordis.patch.yml` theo chuẩn generic mcpServers, tách biệt rõ ràng giữa config và runtime args.
+3. **Cloakbrowser + chọn ổ**: Quét danh sách ổ đĩa và cho phép chọn ổ đĩa cài đặt (mặc định D:, C:), bảo toàn mã nguồn và profile cũ nếu đã có.
+4. **uv mcp-atlassian & tránh khóa file**: Kiểm tra `mcp-atlassian` v0.23.1 đã tồn tại hay chưa trước khi gọi `uv tool install`, bỏ qua nếu đã đúng phiên bản nhằm ngăn ngừa lỗi Windows File Lock (`os error 5`). Bọc khối gọi `uv` trong `try/catch` an toàn.
+5. **Non-interactive / CI guard**: Tự động phát hiện môi trường non-interactive hoặc CI (`-not [Environment]::UserInteractive`), ném lỗi rõ ràng khi thiếu tham số bắt buộc như `AI_API_KEY` để tránh vòng lặp vô tận.
 6. **Separated Templates**: Toàn bộ các file mẫu cấu hình (`cordis.patch.yml`, `.credentials.yaml`, `memorix-agents-section.md`, `.env.example`) được tách riêng trong thư mục `templates/`, có cơ chế fallback chuỗi an toàn.
-7. **Safe-Trash & Recycle Bin**: 100% các thao tác dọn dẹp và xóa tệp tạm đều sử dụng Recycle Bin, cấm triệt để xóa vĩnh viễn.
-
+7. **Safe-Trash & Recycle Bin**: 100% các thao tác dọn dẹp và xóa tệp tạm đều sử dụng Recycle Bin, cấm triệt để xóa vĩnh viễn, không sửa `$PROFILE` hay ô nhiễm môi trường người dùng.
 ---
 
 ## Kiểm thử tự động (Evidence Loop)

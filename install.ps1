@@ -21,14 +21,20 @@ Write-Host "================================================================" -F
 
 # 1. Kiểm tra DSH CLI trong PATH
 Write-Host "==> Kiểm tra DSH CLI trong hệ thống..." -ForegroundColor Cyan
+$isNonInteractive = [Environment]::GetEnvironmentVariable("CI") -or (-not [Environment]::UserInteractive)
+
 $dshCmd = Get-Command "dsh" -ErrorAction SilentlyContinue
 if (-not $dshCmd) {
-    $shellName = if ($PSVersionTable.PSEdition -eq 'Core') { "PowerShell Core (pwsh)" } elseif ($PSVersionTable.PSEdition -eq 'Desktop') { "Windows PowerShell 5.1" } else { "Command Prompt / Shell" }
-    Write-Warning "Không tìm thấy 'dsh' trong PATH (Môi trường phát hiện: $shellName)."
-    $installChoice = Read-Host "DSH CLI chưa được cài đặt. Bạn có muốn cài đặt chính gốc ngay bây giờ không? [Y/n]"
-    $installChoice = if ($installChoice) { $installChoice.Trim() } else { "Y" }
+    Write-Host "[!] DSH CLI chưa được cài đặt trong PATH." -ForegroundColor Yellow
+    $installChoice = "Y"
+    if (-not $isNonInteractive) {
+        $inputChoice = Read-Host "DSH CLI chưa được cài đặt. Bạn có muốn cài đặt DSH chính gốc ngay bây giờ không? [Y/n]"
+        if ($inputChoice) { $installChoice = $inputChoice.Trim() }
+    }
     if ($installChoice -notmatch '^[nN]$') {
-        Write-Host "==> Đang cài đặt DSH CLI chính gốc từ nhà phát triển..." -ForegroundColor Cyan
+        $terminalType = if ($PSVersionTable.PSEdition -eq "Core") { "PowerShell Core / pwsh" } else { "Windows PowerShell" }
+        Write-Host "==> Nhận diện terminal: $terminalType (PSVersion: $($PSVersionTable.PSVersion))." -ForegroundColor Cyan
+        Write-Host "==> Đang cài đặt DSH chính gốc từ nhà phát triển qua npm install -g deepseek-harness..." -ForegroundColor Cyan
         try {
             npm install -g deepseek-harness --silent
         } catch {
@@ -56,26 +62,36 @@ if (-not $dshCmd) {
 # 2. Hỏi tương tác cấu hình AI Provider
 Write-Host ""
 Write-Host "==> Cấu hình kết nối AI Provider..." -ForegroundColor Cyan
-$defaultAiUrl = if ($env:AI_BASE_URL) { $env:AI_BASE_URL } else { "http://localhost:20128/v1" }
-$inputAiUrl = Read-Host "Nhập AI Base URL [Mặc định: $defaultAiUrl]"
-$aiBaseUrl = if ([string]::IsNullOrWhiteSpace($inputAiUrl)) { $defaultAiUrl } else { $inputAiUrl.Trim() }
+$defaultAiUrl = "http://localhost:20128/v1"
+if ($env:AI_BASE_URL -and -not [string]::IsNullOrWhiteSpace($env:AI_BASE_URL)) {
+    $defaultAiUrl = $env:AI_BASE_URL.Trim()
+}
+if ($isNonInteractive) {
+    $aiBaseUrl = $defaultAiUrl
+} else {
+    $inputAiUrl = Read-Host "Nhập AI Base URL [Mặc định: $defaultAiUrl]"
+    $aiBaseUrl = if ([string]::IsNullOrWhiteSpace($inputAiUrl)) { $defaultAiUrl } else { $inputAiUrl.Trim() }
+}
 
 $aiApiKey = ""
-if ($env:AI_API_KEY -and -not [string]::IsNullOrWhiteSpace($env:AI_API_KEY)) {
-    $aiApiKey = $env:AI_API_KEY.Trim()
-    Write-Host "==> Sử dụng AI_API_KEY từ biến môi trường hiện tại." -ForegroundColor Green
+if ($isNonInteractive) {
+    if ($env:AI_API_KEY -and -not [string]::IsNullOrWhiteSpace($env:AI_API_KEY)) {
+        $aiApiKey = $env:AI_API_KEY.Trim()
+    } else {
+        throw "Lỗi: AI_API_KEY là bắt buộc trong môi trường non-interactive/CI nhưng chưa được thiết lập."
+    }
 } else {
-    while ($true) {
+    while ([string]::IsNullOrWhiteSpace($aiApiKey)) {
         $inputKey = Read-Host "Nhập AI API Key (Bắt buộc)"
-        if (-not [string]::IsNullOrWhiteSpace($inputKey)) {
+        if ([string]::IsNullOrWhiteSpace($inputKey)) {
+            Write-Host "[!] AI API Key không được để trống. Bắt buộc phải nhập key." -ForegroundColor Yellow
+        } else {
             $aiApiKey = $inputKey.Trim()
-            break
         }
-        Write-Host "Cảnh báo: AI API Key là bắt buộc, không được để trống! Vui lòng nhập lại." -ForegroundColor Yellow
     }
 }
 
-# 3. Hỏi tương tác cài đặt Memorix (Mặc định: Tự động kích hoạt nếu đã có CLI, hoặc hỏi người dùng)
+# 3. Hỏi tương tác cài đặt Memorix
 Write-Host ""
 Write-Host "==> Cấu hình tiện ích bổ sung..." -ForegroundColor Cyan
 if ($PSBoundParameters.ContainsKey('EnableMemorix')) {
@@ -83,35 +99,23 @@ if ($PSBoundParameters.ContainsKey('EnableMemorix')) {
 } elseif ($PSBoundParameters.ContainsKey('DisableMemorix')) {
     $enableMemorix = -not $DisableMemorix.IsPresent
 } else {
-    if (Get-Command "memorix" -ErrorAction SilentlyContinue) {
-        Write-Host "==> Đã phát hiện Memorix CLI trong hệ thống. Tự động kích hoạt và cập nhật lên phiên bản mới nhất..." -ForegroundColor Green
+    $memorixCmd = Get-Command "memorix" -ErrorAction SilentlyContinue
+    if ($memorixCmd) {
+        Write-Host "==> Đã phát hiện Memorix trên hệ thống tại: $($memorixCmd.Source)" -ForegroundColor Green
+        Write-Host "    -> Tự động kích hoạt và cập nhật Memorix lên phiên bản mới nhất..." -ForegroundColor Cyan
         $enableMemorix = $true
     } else {
-        $memorixChoice = Read-Host "Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]"
-        $enableMemorix = if (-not [string]::IsNullOrWhiteSpace($memorixChoice) -and $memorixChoice.Trim().ToLower() -eq 'y') { $true } else { $false }
+        if ($isNonInteractive) {
+            $enableMemorix = $false
+        } else {
+            $installMemorixPrompt = Read-Host "Bạn có muốn cài đặt Memorix (MCP & Session Memory) không? [y/N]"
+            $enableMemorix = if (-not [string]::IsNullOrWhiteSpace($installMemorixPrompt) -and $installMemorixPrompt.Trim().ToLower() -eq 'y') { $true } else { $false }
+        }
     }
 }
-
 $env:AI_BASE_URL = $aiBaseUrl
 $env:AI_API_KEY = $aiApiKey
 
-# Lưu cấu hình vào file .env tạm thời nếu chưa có
-$localEnvPath = Join-Path $PWD ".env"
-if (-not (Test-Path $localEnvPath)) {
-    $envContent = @"
-AI_BASE_URL=$aiBaseUrl
-AI_API_KEY=$aiApiKey
-JIRA_URL=https://jira.cybertech.vn
-JIRA_PERSONAL_TOKEN=
-CONFLUENCE_URL=https://conf.cybertech.vn
-CONFLUENCE_PERSONAL_TOKEN=
-CONTEXT7_API_KEY=
-GITLAB_HOST=10.30.1.17
-GITLAB_TOKEN=
-"@
-    Set-Content -Path $localEnvPath -Value $envContent -Encoding UTF8
-    Write-Host "==> Đã lưu cấu hình ban đầu vào $localEnvPath" -ForegroundColor DarkGray
-}
 
 # 4. Tải hoặc xác định gói cài đặt
 $zipUrl = "https://github.com/thanhpk6120/setup-dsh/archive/refs/heads/main.zip"
@@ -121,21 +125,20 @@ $zipFile = Join-Path $env:TEMP ("dsh-repo-" + [System.Guid]::NewGuid().ToString(
 # Hàm dọn dẹp bằng cách di chuyển vào Thùng rác (Recycle Bin)
 Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
 function Safe-Trash {
-    param([string]$Target)
-    if ($Target -and (Test-Path -LiteralPath $Target)) {
-        if (Get-Command "trash" -ErrorAction SilentlyContinue) {
-            trash $Target
-            return
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    if (Get-Command "trash" -ErrorAction SilentlyContinue) {
+        trash $Path
+        return
+    }
+    try {
+        if ([System.IO.Directory]::Exists($Path)) {
+            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($Path, 'OnlyErrorDialogs', 'SendToRecycleBin')
+        } elseif ([System.IO.File]::Exists($Path)) {
+            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($Path, 'OnlyErrorDialogs', 'SendToRecycleBin')
         }
-        try {
-            if ([System.IO.Directory]::Exists($Target)) {
-                [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($Target, 'OnlyErrorDialogs', 'SendToRecycleBin')
-            } elseif ([System.IO.File]::Exists($Target)) {
-                [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($Target, 'OnlyErrorDialogs', 'SendToRecycleBin')
-            }
-        } catch {
-            Write-Warning "Không thể di chuyển '$Target' vào Thùng rác: $($_.Exception.Message)"
-        }
+    } catch {
+        Write-Warning "Không thể di chuyển '$Path' vào Thùng rác: $($_.Exception.Message)"
     }
 }
 
@@ -180,6 +183,6 @@ try {
     & $bootstrapScript @bootstrapParams
 }
 finally {
-    if (Test-Path $zipFile) { Safe-Trash -Target $zipFile }
-    if (Test-Path $tempBase) { Safe-Trash -Target $tempBase }
+    if (Test-Path $zipFile) { Safe-Trash -Path $zipFile }
+    if (Test-Path $tempBase) { Safe-Trash -Path $tempBase }
 }
