@@ -46,13 +46,29 @@ while ([string]::IsNullOrWhiteSpace($aiApiKey)) {
     }
 }
 
-# 3. Tùy chọn Memorix
+# 3. Cau hinh tien ich bo sung (Memorix)
+Write-Host ""
+Write-Host "==> Cau hinh tien ich bo sung..." -ForegroundColor Cyan
+$selectedMemorix = $null
+
 if ($PSBoundParameters.ContainsKey('EnableMemorix')) {
-    $selectedMemorix = $EnableMemorix.IsPresent
+    $selectedMemorix = $true
 } elseif ($PSBoundParameters.ContainsKey('DisableMemorix')) {
-    $selectedMemorix = -not $DisableMemorix.IsPresent
+    $selectedMemorix = $false
 } else {
-    $selectedMemorix = $null
+    $existingMemorix = Get-Command "memorix" -ErrorAction SilentlyContinue
+    if ($existingMemorix) {
+        Write-Host "==> Phat hien he thong da co san Memorix tai: $($existingMemorix.Source)" -ForegroundColor Green
+        Write-Host "==> Tu dong bat Memorix va cap nhat len phien ban moi nhat." -ForegroundColor Green
+        $selectedMemorix = $true
+    } else {
+        $memorixPrompt = Read-Host "Ban co muon cai dat them tien ich Memorix (quan ly memory, reasoning, project history) khong? [y/N]"
+        if (-not [string]::IsNullOrWhiteSpace($memorixPrompt) -and $memorixPrompt.Trim().ToLower() -eq 'y') {
+            $selectedMemorix = $true
+        } else {
+            $selectedMemorix = $false
+        }
+    }
 }
 
 $env:AI_BASE_URL = $aiBaseUrl
