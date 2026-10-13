@@ -262,9 +262,13 @@ if ($installGlab) {
 
 if ($installMemorix) {
     if (-not $SkipInstall) {
-        Write-Host "==> Cai dat memorix toan cuc..." -ForegroundColor Cyan
+        Write-Host "==> Dang cai dat / cap nhat Memorix len phien ban moi nhat (npm install -g memorix)..." -ForegroundColor Cyan
         if (-not $DryRun) {
-            npm install -g memorix
+            try {
+                npm install -g memorix
+            } catch {
+                Write-Warning "Cai dat/cap nhat Memorix gap loi: $($_.Exception.Message)"
+            }
         }
     }
 
