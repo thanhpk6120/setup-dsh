@@ -10,7 +10,7 @@ File cấu hình được đặt vào thư mục profile của DSH:
 - `%USERPROFILE%\.dsh\AGENTS.md`
 - `%USERPROFILE%\.dsh\skills\`
 
-1. **LLM Provider**: Trỏ về 9router với 4 models chính:
+1. **LLM Provider**: Trỏ về Custom Gateway với 4 models chính:
    - `claude-fable-5`
    - `claude-haiku-4-5-20251001`
    - `claude-opus-5`
