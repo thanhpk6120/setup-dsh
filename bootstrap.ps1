@@ -18,6 +18,10 @@ $ErrorActionPreference = "Stop"
 # 1. Ham xac nhan cai dat tung MCP Server (interactive choice y/N, mac dinh N)
 function Confirm-McpInstall {
     param([string]$Name)
+    if ($Force -or $OverwriteAll) {
+        Write-Host "  -> [Force] Tu dong cai dat MCP '$Name'." -ForegroundColor Cyan
+        return $true
+    }
     if ($DryRun) {
         Write-Host "  -> [WhatIf] Bo qua prompt cai dat MCP '$Name'." -ForegroundColor DarkGray
         return $false
@@ -35,7 +39,7 @@ function Confirm-McpInstall {
     return $false
 }
 
-# Xử lý lựa chọn Memorix
+# Xu ly lua chon Memorix
 if (-not $PSBoundParameters.ContainsKey('EnableMemorix') -and -not $PSBoundParameters.ContainsKey('DisableMemorix')) {
     $installMemorix = Confirm-McpInstall -Name "memorix"
     if (-not $installMemorix) { Write-Host "Skipped MCP 'memorix' theo lua chon nguoi dung." -ForegroundColor Yellow }
@@ -64,7 +68,7 @@ if (-not $installCloakbrowser) { Write-Host "Skipped MCP 'cloakbrowser' theo lua
 
 $isForce = $Force.IsPresent -or $OverwriteAll.IsPresent
 
-# 2. Quy tắc an toàn: Safe-Trash (Recycle Bin / Trash)
+# 2. Quy tac an toan: Safe-Trash (Recycle Bin / Trash)
 Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
 function Safe-Trash {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -84,11 +88,11 @@ function Safe-Trash {
     }
 }
 
-# 3. Nạp biến môi trường từ .env (nếu có)
+# 3. Nap bien moi truong tu .env (neu co)
 function Load-Env {
     param([string]$EnvPath = (Join-Path $PSScriptRoot ".env"))
     if (Test-Path $EnvPath) {
-        Write-Host "  -> Nạp biến môi trường từ $EnvPath..." -ForegroundColor Cyan
+        Write-Host "  -> Nap bien moi truong tu $EnvPath..." -ForegroundColor Cyan
         Get-Content $EnvPath | ForEach-Object {
             $line = $_.Trim()
             if ($line -and -not $line.StartsWith("#")) {
@@ -109,7 +113,7 @@ function Load-Env {
 }
 Load-Env
 
-# 4. Hàm nhập liệu Get-EnvOrPrompt
+# 4. Ham nhap lieu Get-EnvOrPrompt
 function Get-EnvOrPrompt {
     param(
         [Parameter(Mandatory = $true)]
@@ -143,11 +147,11 @@ function Get-EnvOrPrompt {
     }
 }
 
-# 5. Kiểm tra môi trường Node.js và Git
-Write-Host "==> Kiểm tra môi trường runtime..." -ForegroundColor Cyan
+# 5. Kiem tra moi truong Node.js va Git
+Write-Host "==> Kiem tra moi truong runtime..." -ForegroundColor Cyan
 foreach ($tool in @("node", "npm", "git")) {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
-        throw "Lỗi: Không tìm thấy '$tool' trong PATH. Vui lòng cài đặt trước."
+        throw "Loi: Khong tim thay '$tool' trong PATH. Vui long cai dat truoc."
     }
 }
 
@@ -155,18 +159,18 @@ $nodeVerRaw = (node -v 2>$null | Out-String).Trim()
 try {
     $nodeVer = [version]($nodeVerRaw.TrimStart('v'))
 } catch {
-    throw "Không thể xác định phiên bản Node.js: '$nodeVerRaw'"
+    throw "Khong the xac dinh phien ban Node.js: '$nodeVerRaw'"
 }
 if ($nodeVer -lt [version]"22.18.0") {
     $toolsList = "gitnexus, context7"
     if ($installMemorix) { $toolsList = "memorix, gitnexus, context7" }
-    throw "Yêu cầu Node.js >= 22.18.0 (do $toolsList yêu cầu Node mới). Phiên bản hiện tại: '$nodeVerRaw'. Vui lòng nâng cấp Node.js."
+    throw "Yeu cau Node.js >= 22.18.0 (do $toolsList yeu cau Node moi). Phien ban hien tai: '$nodeVerRaw'. Vui long nang cap Node.js."
 }
 
-# 6. Cài đặt các công cụ phụ thuộc theo lựa chọn MCP
+# 6. Cai dat cac cong cu phu thuoc theo lua chon MCP
 if ($installAtlassian) {
     if (-not $SkipInstall -and -not (Get-Command "uv" -ErrorAction SilentlyContinue)) {
-        Write-Host "==> Đang cài đặt uv qua lệnh chính gốc..." -ForegroundColor Cyan
+        Write-Host "==> Dang cai dat uv qua lenh chinh goc..." -ForegroundColor Cyan
         if (-not $DryRun) {
             try {
                 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -174,7 +178,7 @@ if ($installAtlassian) {
                 $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
                 $env:Path = "$machinePath;$userPath"
             } catch {
-                Write-Warning "Không thể tự động cài đặt uv: $($_.Exception.Message)"
+                Write-Warning "Khong the tu dong cai dat uv: $($_.Exception.Message)"
             }
         }
     }
@@ -195,23 +199,23 @@ if ($installAtlassian) {
                 if (Get-Command "mcp-atlassian" -ErrorAction SilentlyContinue) { $hasAtlassian = $true }
 
                 if ($hasAtlassian) {
-                    Write-Host "==> mcp-atlassian đã có sẵn trên máy. Bỏ qua cài đặt lại để tránh lỗi khóa file Windows." -ForegroundColor Green
+                    Write-Host "==> mcp-atlassian da co san tren may. Bo qua cai dat lai de tranh loi khoa file Windows." -ForegroundColor Green
                 } else {
                     try {
-                        Write-Host "==> Cài đặt mcp-atlassian==0.23.1 qua uv tool..." -ForegroundColor Cyan
+                        Write-Host "==> Cai dat mcp-atlassian==0.23.1 qua uv tool..." -ForegroundColor Cyan
                         $installOutput = (uv tool install mcp-atlassian==0.23.1 2>&1 | Out-String)
                         if ($LASTEXITCODE -ne 0) {
-                            Write-Warning "Cài đặt uv tool mcp-atlassian: $installOutput"
-                            Write-Host "==> Lưu ý: DSH chạy qua 'uvx --from mcp-atlassian==0.23.1' nên công cụ vẫn sẽ tự động tải." -ForegroundColor Cyan
+                            Write-Warning "Cai dat uv tool mcp-atlassian: $installOutput"
+                            Write-Host "==> Luu y: DSH chay qua 'uvx --from mcp-atlassian==0.23.1' nen cong cu van se tu dong tai." -ForegroundColor Cyan
                         } else {
-                            Write-Host "==> Cài đặt mcp-atlassian thành công." -ForegroundColor Green
+                            Write-Host "==> Cai dat mcp-atlassian thanh cong." -ForegroundColor Green
                         }
                     } catch {
-                        Write-Warning "Cài đặt mcp-atlassian gặp lỗi: $($_.Exception.Message)"
+                        Write-Warning "Cai dat mcp-atlassian gap loi: $($_.Exception.Message)"
                     }
                 }
             } else {
-                Write-Warning "'uv' chưa khả dụng trong PATH hiện tại."
+                Write-Warning "'uv' chua kha dung trong PATH hien tai."
             }
         }
     }
@@ -219,7 +223,7 @@ if ($installAtlassian) {
 
 if ($installGitnexus) {
     if (-not $SkipInstall) {
-        Write-Host "==> Cài đặt gitnexus toàn cục..." -ForegroundColor Cyan
+        Write-Host "==> Cai dat gitnexus toan cuc..." -ForegroundColor Cyan
         if (-not $DryRun) {
             npm install -g gitnexus --silent
         }
@@ -228,7 +232,7 @@ if ($installGitnexus) {
 
 if ($installContext7) {
     if (-not $SkipInstall) {
-        Write-Host "==> Cài đặt @upstash/context7-mcp toàn cục..." -ForegroundColor Cyan
+        Write-Host "==> Cai dat @upstash/context7-mcp toan cuc..." -ForegroundColor Cyan
         if (-not $DryRun) {
             npm install -g @upstash/context7-mcp --silent
         }
@@ -237,7 +241,7 @@ if ($installContext7) {
 
 if ($installGlab) {
     if (-not $SkipInstall -and -not (Get-Command "glab" -ErrorAction SilentlyContinue)) {
-        Write-Host "==> Cài đặt glab (GitLab CLI)..." -ForegroundColor Cyan
+        Write-Host "==> Cai dat glab (GitLab CLI)..." -ForegroundColor Cyan
         if (-not $DryRun) {
             if (Get-Command "winget" -ErrorAction SilentlyContinue) {
                 try {
@@ -247,10 +251,10 @@ if ($installGlab) {
                         $env:Path = "$glabProg;$env:Path"
                     }
                 } catch {
-                    Write-Warning "Không thể cài đặt glab qua winget: $($_.Exception.Message)"
+                    Write-Warning "Khong the cai dat glab qua winget: $($_.Exception.Message)"
                 }
             } else {
-                Write-Warning "Lệnh 'winget' không khả dụng. Vui lòng tự cài đặt glab."
+                Write-Warning "Lenh 'winget' khong kha dung. Vui long tu cai dat glab."
             }
         }
     }
@@ -258,7 +262,7 @@ if ($installGlab) {
 
 if ($installMemorix) {
     if (-not $SkipInstall) {
-        Write-Host "==> Cài đặt memorix toàn cục..." -ForegroundColor Cyan
+        Write-Host "==> Cai dat memorix toan cuc..." -ForegroundColor Cyan
         if (-not $DryRun) {
             npm install -g memorix
         }
@@ -266,14 +270,14 @@ if ($installMemorix) {
 
     $shouldSetupHook = $false
     if (-not $DryRun -and [Environment]::UserInteractive -and -not $env:CI -and -not $SkipInstall) {
-        $hookChoice = Read-Host "[?] Cai dat Hook tich hop Memorix vao DSH? (Yeu cau cai dat 'bun') [y/N]"
+        $hookChoice = Read-Host "[?] Cai dat Hook tich hop Memorix vao DSH? [y/N]"
         if (-not [string]::IsNullOrWhiteSpace($hookChoice) -and ($hookChoice.Trim().ToLower() -eq 'y' -or $hookChoice.Trim().ToLower() -eq 'yes')) {
             $shouldSetupHook = $true
         }
     }
 
     if ($shouldSetupHook) {
-        Write-Host "==> Cấu hình hook Memorix cho DSH..." -ForegroundColor Cyan
+        Write-Host "==> Cau hinh hook Memorix cho DSH..." -ForegroundColor Cyan
         $npmPrefix = ""
         try { $npmPrefix = (npm prefix -g 2>$null | Out-String).Trim() } catch {}
         if ($npmPrefix -and (Test-Path $npmPrefix) -and ($env:Path -notlike "*$npmPrefix*")) {
@@ -282,7 +286,7 @@ if ($installMemorix) {
         try {
             memorix setup --agent dsh --global
         } catch {
-            Write-Warning "Không thể chạy hook 'memorix setup --agent dsh --global': $($_.Exception.Message)"
+            Write-Warning "Khong the chay hook 'memorix setup --agent dsh --global': $($_.Exception.Message)"
         }
     } else {
         if (-not $DryRun) {
@@ -291,7 +295,7 @@ if ($installMemorix) {
     }
 }
 
-# 7. Cấu hình CloakBrowser (nếu được chọn)
+# 7. Cau hinh CloakBrowser (neu duoc chon)
 function Get-CloakBrowserInstallDir {
     param([string]$EnvVarName = "CLOAKBROWSER_DIR")
     $envVal = [Environment]::GetEnvironmentVariable($EnvVarName, "Process")
@@ -314,7 +318,7 @@ function Get-CloakBrowserInstallDir {
         return "$defaultLetter\mcp-servers\cloakbrowser"
     }
 
-    Write-Host "`n==> Quét danh sách ổ đĩa để cài đặt CloakBrowser MCP:" -ForegroundColor Cyan
+    Write-Host "`n==> Quet danh sach o dia de cai dat CloakBrowser MCP:" -ForegroundColor Cyan
     for ($i = 0; $i -lt $drives.Count; $i++) {
         $d = $drives[$i]
         $devId = ""
@@ -326,10 +330,10 @@ function Get-CloakBrowserInstallDir {
         $freeGB = [math]::Round(($freeVal / 1GB), 2)
         $sizeGB = "N/A"
         if ($d.Size) { $sizeGB = [math]::Round(($d.Size / 1GB), 2) }
-        Write-Host "  [$($i+1)] Ổ $devId$volName | Trống: $freeGB GB / $sizeGB GB"
+        Write-Host "  [$($i+1)] O $devId$volName | Trong: $freeGB GB / $sizeGB GB"
     }
 
-    $promptMsg = "Chọn số thứ tự ổ đĩa muốn lưu CloakBrowser (mặc định ổ $defaultLetter)"
+    $promptMsg = "Chon so thu tu o dia muon luu CloakBrowser (mac dinh o $defaultLetter)"
     try {
         $inputVal = Read-Host $promptMsg
         if (-not [string]::IsNullOrWhiteSpace($inputVal)) {
@@ -349,7 +353,7 @@ function Get-CloakBrowserInstallDir {
 
 function Setup-CloakBrowser {
     param([string]$TargetDir, [string]$SourceDir, [switch]$DryRun, [switch]$SkipInstall)
-    Write-Host "==> Cấu hình CloakBrowser tại: $TargetDir" -ForegroundColor Cyan
+    Write-Host "==> Cau hinh CloakBrowser tai: $TargetDir" -ForegroundColor Cyan
     if (-not (Test-Path $TargetDir)) {
         if (-not $DryRun) { New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null }
     }
@@ -357,9 +361,9 @@ function Setup-CloakBrowser {
     $mainScript = Join-Path $TargetDir "mcp-server-full.mjs"
     $pkgJson = Join-Path $TargetDir "package.json"
     if ((Test-Path $mainScript) -and (Test-Path $pkgJson)) {
-        Write-Host "  -> CloakBrowser đã tồn tại đầy đủ file mã nguồn. Giữ nguyên dữ liệu & profile cũ (không ghi đè)." -ForegroundColor Green
+        Write-Host "  -> CloakBrowser da ton tai day du file ma nguon. Giu nguyen du lieu & profile cu (khong ghi de)." -ForegroundColor Green
     } else {
-        Write-Host "  -> Sao chép mã nguồn CloakBrowser sang $TargetDir..." -ForegroundColor Green
+        Write-Host "  -> Sao chep ma nguon CloakBrowser sang $TargetDir..." -ForegroundColor Green
         if (-not $DryRun -and (Test-Path $SourceDir)) {
             Copy-Item -Path "$SourceDir\*" -Destination $TargetDir -Recurse -Force
         }
@@ -367,14 +371,14 @@ function Setup-CloakBrowser {
 
     $nodeModules = Join-Path $TargetDir "node_modules"
     if (-not $SkipInstall -and -not (Test-Path $nodeModules)) {
-        Write-Host "  -> Đang chạy 'npm install' cho CloakBrowser..." -ForegroundColor Cyan
+        Write-Host "  -> Dang chay 'npm install' cho CloakBrowser..." -ForegroundColor Cyan
         if (-not $DryRun) {
             Push-Location $TargetDir
             try {
                 npm install --omit=dev --silent
                 npx playwright install chromium
             } catch {
-                Write-Warning "npm install cho CloakBrowser gặp lỗi: $($_.Exception.Message)"
+                Write-Warning "npm install cho CloakBrowser gap loi: $($_.Exception.Message)"
             } finally {
                 Pop-Location
             }
@@ -383,8 +387,8 @@ function Setup-CloakBrowser {
     return $mainScript
 }
 
-# 8. Thu thập thông tin cấu hình
-Write-Host "==> Thu thập các giá trị cấu hình..." -ForegroundColor Cyan
+# 8. Thu thap thong tin cau hinh
+Write-Host "==> Thu thap cac gia tri cau hinh..." -ForegroundColor Cyan
 $aiBaseUrl = Get-EnvOrPrompt -EnvName "AI_BASE_URL" -Prompt "AI Base URL" -Default "http://localhost:20128/v1"
 $aiKey     = Get-EnvOrPrompt -EnvName "AI_API_KEY" -Prompt "AI API Key"
 
@@ -416,7 +420,7 @@ if ($installGlab) {
                 glab auth login --hostname $gitlabHost --token $gitlabToken 2>$null
             }
         } catch {
-            Write-Warning "Không thể đăng nhập tự động vào GitLab: $($_.Exception.Message)"
+            Write-Warning "Khong the dang nhap tu dong vao GitLab: $($_.Exception.Message)"
         }
     }
 }
@@ -444,7 +448,7 @@ if ($installGitnexus) {
       - mcp
 "@
     } else {
-        throw "Lỗi: Không tìm thấy gitnexus bằng Get-Command."
+        throw "Loi: Khong tim thay gitnexus bang Get-Command."
     }
 }
 
@@ -468,7 +472,7 @@ if ($installContext7) {
     } catch {}
 
     if (-not $context7Detected) {
-        throw "Lỗi: Không tìm thấy context7 index.js."
+        throw "Loi: Khong tim thay context7 index.js."
     }
 
     if (-not [string]::IsNullOrWhiteSpace($ctxKey)) {
@@ -487,7 +491,7 @@ if ($installCloakbrowser) {
     $escapedCloakScript = ($cloakScriptPath).Replace('\', '\\')
 }
 
-# 9. Khởi tạo và xây dựng cordis.patch.yml an toàn
+# 9. Khoi tao va xay dung cordis.patch.yml an toan
 $baseCordisYaml = @"
 # Your patch layer for this dsh profile, applied after every bundle layer:
 # a top-level YAML array of loader patch entries (id-targeted config
@@ -675,7 +679,7 @@ refs:
 apiKey: $aiKey
 "@
 
-# 10. Hàm hợp nhất cấu hình YAML (Merge cordis.patch.yml)
+# 10. Ham hop nhat cau hinh YAML (Merge cordis.patch.yml)
 function Merge-CordisPatchYaml {
     param(
         [Parameter(Mandatory = $true)][string]$ExistingContent,
@@ -726,7 +730,7 @@ function Write-ConfigFileWithConflictResolution {
     }
 
     if (-not (Test-Path $TargetPath)) {
-        Write-Host "  -> Tạo mới: $TargetPath" -ForegroundColor Green
+        Write-Host "  -> Tao moi: $TargetPath" -ForegroundColor Green
         if (-not $DryRun) {
             [System.IO.File]::WriteAllText($TargetPath, $Content, [System.Text.UTF8Encoding]::new($false))
         }
@@ -734,7 +738,7 @@ function Write-ConfigFileWithConflictResolution {
     }
 
     if ($Force) {
-        Write-Host "  -> Ghi đè (--Force): $TargetPath" -ForegroundColor Green
+        Write-Host "  -> Ghi de (--Force): $TargetPath" -ForegroundColor Green
         if (-not $DryRun) {
             [System.IO.File]::WriteAllText($TargetPath, $Content, [System.Text.UTF8Encoding]::new($false))
         }
@@ -744,26 +748,26 @@ function Write-ConfigFileWithConflictResolution {
     if ($IsMcpYaml) {
         $existing = Get-Content $TargetPath -Raw
         $merged = Merge-CordisPatchYaml -ExistingContent $existing -NewContent $Content
-        Write-Host "  -> Hợp nhất cấu hình vào: $TargetPath" -ForegroundColor Green
+        Write-Host "  -> Hop nhat cau hinh vao: $TargetPath" -ForegroundColor Green
         if (-not $DryRun) {
             [System.IO.File]::WriteAllText($TargetPath, $merged, [System.Text.UTF8Encoding]::new($false))
         }
     } else {
-        Write-Host "  -> Bỏ qua $TargetPath (đã tồn tại)" -ForegroundColor Yellow
+        Write-Host "  -> Bo qua $TargetPath (da ton tai)" -ForegroundColor Yellow
     }
 }
 
-# 11. Ghi file cấu hình
+# 11. Ghi file cau hinh
 $cordisPatchPath = Join-Path $DshProfileDir "cordis.patch.yml"
 Write-ConfigFileWithConflictResolution -TargetPath $cordisPatchPath -Content $baseCordisYaml -IsMcpYaml -DryRun:$DryRun -Force:$isForce
 
 Write-ConfigFileWithConflictResolution -TargetPath $CredentialsPath -Content $credentialsYaml -DryRun:$DryRun -Force:$isForce
 
-# 12. Sao chép AGENTS.md và skills/
+# 12. Sao chep AGENTS.md va skills/
 $sourceAgents = Join-Path $PSScriptRoot "AGENTS.md"
 $targetAgents = Join-Path $DshHome "AGENTS.md"
 if (Test-Path $sourceAgents) {
-    Write-Host "  -> Cập nhật AGENTS.md tại $targetAgents..." -ForegroundColor Green
+    Write-Host "  -> Cap nhat AGENTS.md tai $targetAgents..." -ForegroundColor Green
     if (-not $DryRun) {
         $agentsDir = Split-Path $targetAgents -Parent
         if (-not (Test-Path $agentsDir)) { New-Item -ItemType Directory -Path $agentsDir -Force | Out-Null }
@@ -774,7 +778,7 @@ if (Test-Path $sourceAgents) {
 $sourceSkillsDir = Join-Path $PSScriptRoot "skills"
 $targetSkillsDir = Join-Path $DshHome "skills"
 if (Test-Path $sourceSkillsDir) {
-    Write-Host "  -> Cập nhật skills/ tại $targetSkillsDir..." -ForegroundColor Green
+    Write-Host "  -> Cap nhat skills/ tai $targetSkillsDir..." -ForegroundColor Green
     if (-not $DryRun) {
         if (-not (Test-Path $targetSkillsDir)) { New-Item -ItemType Directory -Path $targetSkillsDir -Force | Out-Null }
         Copy-Item -Path "$sourceSkillsDir\*" -Destination $targetSkillsDir -Recurse -Force
@@ -782,4 +786,4 @@ if (Test-Path $sourceSkillsDir) {
 }
 
 Write-Host ""
-Write-Host "Hoàn tất bootstrap DSH Desktop!" -ForegroundColor Cyan
+Write-Host "Hoan tat bootstrap DSH Desktop!" -ForegroundColor Cyan

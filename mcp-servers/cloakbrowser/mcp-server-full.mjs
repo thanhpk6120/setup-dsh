@@ -3,10 +3,10 @@
 // Singleton browser context + multi-tab. Profile tách theo tên (default, shopee, tiki...).
 //
 // Đăng ký:
-//   claude mcp add cloakbrowser -- node "D:/Project/AI/cloakbrowser/mcp-server-full.mjs"
+//   claude mcp add cloakbrowser -- node "<path-to-cloakbrowser>/mcp-server-full.mjs"
 //
 // Profile mặc định = 'default'. Data profile lưu trong cùng thư mục file này
-// (PROFILES_ROOT = __dirname = D:/Project/AI/cloakbrowser). Chỉ truyền `profile`
+// (PROFILES_ROOT = __dirname). Chỉ truyền `profile`
 // khác khi cần session riêng (vd: shopee, tiki...).
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';

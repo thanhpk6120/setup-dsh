@@ -23,8 +23,8 @@ Lệnh này cài core library + tải Chromium stealth binary.
 ### Bước 2: Tạo thư mục project MCP server
 
 ```bash
-mkdir D:\Project\AI\cloakbrowser
-cd D:\Project\AI\cloakbrowser
+mkdir -p cloakbrowser
+cd cloakbrowser
 ```
 
 ### Bước 3: Tạo `package.json`
@@ -52,14 +52,14 @@ npm install
 
 ### Bước 5: Copy file MCP server
 
-File `mcp-server-full.mjs` chứa toàn bộ logic server. Đặt tại `D:\Project\AI\cloakbrowser\mcp-server-full.mjs`.
+File `mcp-server-full.mjs` chứa toàn bộ logic server. Đặt tại thư mục cloakbrowser (ví dụ `<path-to-cloakbrowser>/mcp-server-full.mjs`).
 
 ## Đăng ký MCP với Claude Code
 
 ### Cách 1: CLI
 
 ```bash
-claude mcp add cloakbrowser -- node "D:/Project/AI/cloakbrowser/mcp-server-full.mjs"
+claude mcp add cloakbrowser -- node "<path-to-cloakbrowser>/mcp-server-full.mjs"
 ```
 
 ### Cách 2: Thêm vào `settings.json`
@@ -71,7 +71,7 @@ Mở file `~/.claude/settings.json` (hoặc `.claude/settings.json` trong projec
   "mcpServers": {
     "cloakbrowser": {
       "command": "node",
-      "args": ["D:/Project/AI/cloakbrowser/mcp-server-full.mjs"]
+      "args": ["<path-to-cloakbrowser>/mcp-server-full.mjs"]
     }
   }
 }
@@ -79,7 +79,7 @@ Mở file `~/.claude/settings.json` (hoặc `.claude/settings.json` trong projec
 
 ## Cấu trúc Profile
 
-- Profile data lưu tại cùng thư mục với file server: `D:\Project\AI\cloakbrowser\`
+- Profile data lưu tại cùng thư mục với file server: `<path-to-cloakbrowser>/`
 - Profile mặc định: `chrome-profile/` (tên logic: `default`)
 - Profile tùy chỉnh: `chrome-profile-{tên}/` (vd: `chrome-profile-shopee/`)
 
@@ -103,7 +103,7 @@ args: { "tabId": "t1", "fullPage": true }
 → trả về base64 PNG
 
 tool: screenshot
-args: { "tabId": "t1", "savePath": "D:/output/page.png" }
+args: { "tabId": "t1", "savePath": "./output/page.png" }
 → lưu file
 ```
 
@@ -209,7 +209,7 @@ args: { "tabId": "t1", "types": ["image", "font", "stylesheet", "media"] }
 tool: download_file
 args: {
   "url": "https://example.com/report.pdf",
-  "savePath": "D:/downloads/report.pdf",
+  "savePath": "./downloads/report.pdf",
   "profile": "default"
 }
 ```
@@ -245,7 +245,7 @@ args: { "tabId": "t1", "siteKey": "6Le...", "type": "recaptcha-v2" }
 
 ```
 tool: export_storage_state
-args: { "profile": "shopee", "savePath": "D:/backup/shopee-state.json" }
+args: { "profile": "shopee", "savePath": "./backup/shopee-state.json" }
 
 tool: set_storage_state
 args: { "profile": "shopee", "state": { "cookies": [...], "origins": [...] } }
@@ -293,7 +293,7 @@ Nếu cần thay đổi, sửa hàm `getContext()` trong `mcp-server-full.mjs`.
 Error: Cannot find module 'cloakbrowser'
 ```
 
-→ Chạy `npm install` trong thư mục `D:\Project\AI\cloakbrowser`.
+→ Chạy `npm install` trong thư mục cloakbrowser.
 
 ### Browser không mở
 
