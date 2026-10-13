@@ -781,7 +781,7 @@ if (Test-Path $sourceAgents) {
             }
         } else {
             $choice = Read-Host "[?] File '$targetAgents' da ton tai. Ban co muon [O]verwrite (ghi de) hay [S]kip (bo qua)? [O/s]"
-            if ($choice.Trim().ToLower() -eq 's') {
+            if (-not [string]::IsNullOrWhiteSpace($choice) -and $choice.Trim().ToLower() -eq 's') {
                 Write-Host "  -> Bo qua file $targetAgents." -ForegroundColor DarkGray
             } else {
                 $bak = "$targetAgents.bak"

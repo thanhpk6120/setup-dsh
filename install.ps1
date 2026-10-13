@@ -14,73 +14,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "             SETUP-DSH INSTALLER - INTERACTIVE SETUP            " -ForegroundColor Cyan
-Write-Host "================================================================" -ForegroundColor Cyan
-
-# 1. Kiểm tra Node.js và Git trong hệ thống
-Write-Host "==> Kiem tra Node.js va Git trong he thong..." -ForegroundColor Cyan
-foreach ($tool in @("node", "git")) {
-    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
-        throw "Loi: Thieu '$tool' trong PATH. Vui long cai dat '$tool' truoc."
-    }
-}
-
-# 2. Cấu hình kết nối AI Provider
-Write-Host ""
-Write-Host "==> Cau hinh ket noi AI Provider..." -ForegroundColor Cyan
-$defaultAiUrl = "http://localhost:20128/v1"
-if ($env:AI_BASE_URL) { $defaultAiUrl = $env:AI_BASE_URL }
-$inputAiUrl = Read-Host "Nhap AI Base URL [Mac dinh: $defaultAiUrl]"
-$aiBaseUrl = if ([string]::IsNullOrWhiteSpace($inputAiUrl)) { $defaultAiUrl } else { $inputAiUrl.Trim() }
-
-$aiApiKey = ""
-if ($env:AI_API_KEY) { $aiApiKey = $env:AI_API_KEY }
-while ([string]::IsNullOrWhiteSpace($aiApiKey)) {
-    $inputKey = Read-Host "Nhap AI API Key (Bat buoc, khong co mac dinh)"
-    if (-not [string]::IsNullOrWhiteSpace($inputKey)) {
-        $aiApiKey = $inputKey.Trim()
-    } else {
-        Write-Host "Loi: AI API Key khong duoc bo trong. Vui long nhap khoa hop le." -ForegroundColor Red
-    }
-}
-
-# 3. Cau hinh tien ich bo sung (Memorix)
-Write-Host ""
-Write-Host "==> Cau hinh tien ich bo sung..." -ForegroundColor Cyan
-$selectedMemorix = $null
-
-if ($PSBoundParameters.ContainsKey('EnableMemorix')) {
-    $selectedMemorix = $true
-} elseif ($PSBoundParameters.ContainsKey('DisableMemorix')) {
-    $selectedMemorix = $false
-} else {
-    $existingMemorix = Get-Command "memorix" -ErrorAction SilentlyContinue
-    if ($existingMemorix) {
-        Write-Host "==> Phat hien he thong da co san Memorix tai: $($existingMemorix.Source)" -ForegroundColor Green
-        Write-Host "==> Tu dong bat Memorix va cap nhat len phien ban moi nhat." -ForegroundColor Green
-        $selectedMemorix = $true
-    } else {
-        $memorixPrompt = Read-Host "Ban co muon cai dat them tien ich Memorix (quan ly memory, reasoning, project history) khong? [y/N]"
-        if (-not [string]::IsNullOrWhiteSpace($memorixPrompt) -and $memorixPrompt.Trim().ToLower() -eq 'y') {
-            $selectedMemorix = $true
-        } else {
-            $selectedMemorix = $false
-        }
-    }
-}
-
-$env:AI_BASE_URL = $aiBaseUrl
-$env:AI_API_KEY = $aiApiKey
-
-# 4. Tải hoặc xác định gói cài đặt
-$zipUrl = "https://github.com/thanhpk6120/setup-dsh/archive/refs/heads/main.zip"
-$tempBase = Join-Path $env:TEMP ("dsh-install-" + [System.Guid]::NewGuid().ToString("N"))
-$zipFile = Join-Path $env:TEMP ("dsh-repo-" + [System.Guid]::NewGuid().ToString("N") + ".zip")
-
-# Hàm dọn dẹp bằng cách di chuyển vào Thùng rác (Recycle Bin)
 Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
+
 function Safe-Trash {
     param([Parameter(Mandatory = $true)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return }
@@ -99,42 +34,94 @@ function Safe-Trash {
     }
 }
 
-try {
-    # Kiểm tra nếu đang chạy trực tiếp trong repo có sẵn bootstrap.ps1
-    $localBootstrap = Join-Path $PSScriptRoot "bootstrap.ps1"
-    $bootstrapScript = ""
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host "             SETUP-DSH INSTALLER - INTERACTIVE SETUP            " -ForegroundColor Cyan
+Write-Host "================================================================" -ForegroundColor Cyan
 
-    if (Test-Path $localBootstrap) {
-        Write-Host "==> Su dung ma nguon cuc bo tai: $PSScriptRoot" -ForegroundColor Green
-        $bootstrapScript = $localBootstrap
+# 1. Kiem tra Node.js va Git trong he thong
+Write-Host "==> Kiem tra Node.js va Git trong he thong..." -ForegroundColor Cyan
+foreach ($tool in @("node", "git")) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        throw "Loi: Thieu '$tool' trong PATH. Vui long cai dat '$tool' truoc."
+    }
+}
+
+# 2. Cau hinh ket noi AI Provider
+Write-Host ""
+Write-Host "==> Cau hinh ket noi AI Provider..." -ForegroundColor Cyan
+$defaultAiUrl = "http://localhost:20128/v1"
+if ($env:AI_BASE_URL) { $defaultAiUrl = $env:AI_BASE_URL }
+$inputAiUrl = ""
+if ([Console]::IsInputRedirected -or -not [Environment]::UserInteractive) {
+    $inputAiUrl = $defaultAiUrl
+} else {
+    $inputAiUrl = Read-Host "Nhap AI Base URL [Mac dinh: $defaultAiUrl]"
+}
+$aiBaseUrl = if ([string]::IsNullOrWhiteSpace($inputAiUrl)) { $defaultAiUrl } else { $inputAiUrl.Trim() }
+
+$aiApiKey = ""
+if (-not [string]::IsNullOrWhiteSpace($env:AI_API_KEY)) { $aiApiKey = $env:AI_API_KEY.Trim() }
+while ([string]::IsNullOrWhiteSpace($aiApiKey)) {
+    if ([Console]::IsInputRedirected -or -not [Environment]::UserInteractive) {
+        throw "Loi: Dang chay o che do non-interactive nhung AI API Key chua duoc cung cap qua bien moi truong `$env:AI_API_KEY`."
+    }
+    $inputKey = Read-Host "Nhap AI API Key (Bat buoc)"
+    if (-not [string]::IsNullOrWhiteSpace($inputKey)) {
+        $aiApiKey = $inputKey.Trim()
+        break
+    }
+    Write-Host "[!] AI API Key khong duoc de trong. Vui long nhap key." -ForegroundColor Yellow
+}
+
+# 3. Cau hinh tien ich bo sung (Memorix)
+Write-Host ""
+Write-Host "==> Cau hinh tien ich bo sung..." -ForegroundColor Cyan
+if ($PSBoundParameters.ContainsKey('EnableMemorix')) {
+    $enableMemorix = $EnableMemorix.IsPresent
+} elseif ($PSBoundParameters.ContainsKey('DisableMemorix')) {
+    $enableMemorix = -not $DisableMemorix.IsPresent
+} else {
+    $memorixCmd = Get-Command "memorix" -ErrorAction SilentlyContinue
+    if ($memorixCmd) {
+        Write-Host "==> Da phat hien Memorix tren he thong tai: $($memorixCmd.Source)" -ForegroundColor Green
+    }
+    $installMemorixPrompt = ""
+    if ([Console]::IsInputRedirected -or -not [Environment]::UserInteractive) {
+        $installMemorixPrompt = "n"
     } else {
-        Write-Host "==> Dang tai goi setup-dsh tu GitHub ($zipUrl)..." -ForegroundColor Cyan
-        Invoke-WebRequest -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
+        $installMemorixPrompt = Read-Host "Ban co muon cai dat Memorix (MCP & Session Memory) khong? [y/N]"
+    }
+    $enableMemorix = if (-not [string]::IsNullOrWhiteSpace($installMemorixPrompt) -and $installMemorixPrompt.Trim().ToLower() -eq 'y') { $true } else { $false }
+}
 
-        Write-Host "==> Dang giai nen tap tin..." -ForegroundColor Cyan
-        Expand-Archive -Path $zipFile -DestinationPath $tempBase -Force
+$env:AI_BASE_URL = $aiBaseUrl
+$env:AI_API_KEY = $aiApiKey
 
-        $extractedRoot = Join-Path $tempBase "setup-dsh-main"
-        if (-not (Test-Path $extractedRoot)) {
-            $found = Get-ChildItem -Directory $tempBase | Select-Object -First 1
-            if ($found) { $extractedRoot = $found.FullName }
-        }
+# 4. Tai va giai nen setup-dsh tu GitHub
+$zipUrl = "https://github.com/thanhpk6120/setup-dsh/archive/refs/heads/main.zip"
+$tempBase = Join-Path $env:TEMP ("dsh-install-" + [System.Guid]::NewGuid().ToString("N"))
+$zipFile = Join-Path $env:TEMP ("dsh-repo-" + [System.Guid]::NewGuid().ToString("N") + ".zip")
 
-        $bootstrapScript = Join-Path $extractedRoot "bootstrap.ps1"
-        if (-not (Test-Path $bootstrapScript)) {
-            throw "Loi: Khong tim thay bootstrap.ps1 trong goi cai dat."
-        }
+try {
+    Write-Host ""
+    Write-Host "==> Downloading setup-dsh package from GitHub..." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
 
-        # Ghi file .env tạm thời để bootstrap.ps1 có thể nạp
-        $envFilePath = Join-Path $extractedRoot ".env"
-        $envContent = @"
-AI_BASE_URL=$aiBaseUrl
-AI_API_KEY=$aiApiKey
-"@
-        [System.IO.File]::WriteAllText($envFilePath, $envContent, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "==> Extracting files..." -ForegroundColor Cyan
+    Expand-Archive -Path $zipFile -DestinationPath $tempBase -Force
+
+    $extractedRoot = Join-Path $tempBase "setup-dsh-main"
+    if (-not (Test-Path $extractedRoot)) {
+        $found = Get-ChildItem -Directory $tempBase | Select-Object -First 1
+        if ($found) { $extractedRoot = $found.FullName }
     }
 
-    Write-Host "==> Kich hoat bootstrap.ps1..." -ForegroundColor Cyan
+    $bootstrapScript = Join-Path $extractedRoot "bootstrap.ps1"
+    if (-not (Test-Path $bootstrapScript)) {
+        throw "Loi: Khong tim thay bootstrap.ps1 trong goi cai dat."
+    }
+
+    Write-Host "==> Launching bootstrap..." -ForegroundColor Cyan
     $bootstrapParams = @{}
     if ($PSBoundParameters.ContainsKey('Force')) { $bootstrapParams['Force'] = $Force }
     if ($PSBoundParameters.ContainsKey('OverwriteAll')) { $bootstrapParams['OverwriteAll'] = $OverwriteAll }
@@ -143,16 +130,16 @@ AI_API_KEY=$aiApiKey
     if ($PSBoundParameters.ContainsKey('DshHome')) { $bootstrapParams['DshHome'] = $DshHome }
     if ($PSBoundParameters.ContainsKey('DshProfileDir')) { $bootstrapParams['DshProfileDir'] = $DshProfileDir }
     if ($PSBoundParameters.ContainsKey('CredentialsPath')) { $bootstrapParams['CredentialsPath'] = $CredentialsPath }
-    if ($selectedMemorix -ne $null) {
-        if ($selectedMemorix) { $bootstrapParams['EnableMemorix'] = $true } else { $bootstrapParams['DisableMemorix'] = $true }
+    if ($enableMemorix) {
+        $bootstrapParams['EnableMemorix'] = $true
+    } else {
+        $bootstrapParams['DisableMemorix'] = $true
     }
 
     $paramList = @()
     foreach ($key in $bootstrapParams.Keys) {
         if ($bootstrapParams[$key] -eq $true) {
             $paramList += "-$key"
-        } elseif ($bootstrapParams[$key] -eq $false) {
-            # omit false switch
         } else {
             $paramList += "-$key", "$($bootstrapParams[$key])"
         }
@@ -173,5 +160,5 @@ finally {
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Green
-Write-Host " CAI DAT HOAN TAT CHO DSH (DEEPSEEK HARNESS)!" -ForegroundColor Green
+Write-Host " CAI DAT THANH CONG CHO DSH DESKTOP!" -ForegroundColor Green
 Write-Host "================================================================" -ForegroundColor Green
