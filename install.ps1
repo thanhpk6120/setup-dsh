@@ -38,11 +38,40 @@ Write-Host "================================================================" -F
 Write-Host "             SETUP-DSH INSTALLER - INTERACTIVE SETUP            " -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 
-# 1. Kiem tra Node.js va Git trong he thong
-Write-Host "==> Kiem tra Node.js va Git trong he thong..." -ForegroundColor Cyan
+# 1. Kiem tra DSH Desktop va moi truong runtime (Node.js, Git)
+Write-Host "==> Kiem tra ung dung DSH Desktop va runtime..." -ForegroundColor Cyan
+$dshExePaths = @(
+    "C:\Program Files\DSH Desktop\DSH Desktop.exe",
+    "$env:LOCALAPPDATA\Programs\DSH Desktop\DSH Desktop.exe",
+    "$env:ProgramFiles\DSH Desktop\DSH Desktop.exe"
+)
+$dshInstalled = $false
+foreach ($exe in $dshExePaths) {
+    if (Test-Path $exe) {
+        $dshInstalled = $true
+        Write-Host "==> Da phat hien DSH Desktop tai: $exe" -ForegroundColor Green
+        break
+    }
+}
+if (-not $dshInstalled) {
+    $dshAppData = Join-Path $env:APPDATA "dsh-desktop"
+    if (Test-Path $dshAppData) {
+        Write-Host "==> Da phat hien thu muc profile DSH Desktop tai: $dshAppData" -ForegroundColor Green
+        $dshInstalled = $true
+    }
+}
+
+if (-not $dshInstalled) {
+    Write-Host "[!] DSH Desktop chua duoc cai dat trong he thong." -ForegroundColor Yellow
+    Write-Host "  -> Luu y: Ban can cai dat ung dung DSH Desktop de su dung profile va harness." -ForegroundColor DarkGray
+}
+
 foreach ($tool in @("node", "git")) {
-    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+    $toolCmd = Get-Command $tool -ErrorAction SilentlyContinue
+    if (-not $toolCmd) {
         throw "Loi: Thieu '$tool' trong PATH. Vui long cai dat '$tool' truoc."
+    } else {
+        Write-Host "  -> Tim thay ${tool}: $($toolCmd.Source)" -ForegroundColor DarkGray
     }
 }
 
