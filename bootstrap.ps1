@@ -771,11 +771,34 @@ Write-ConfigFileWithConflictResolution -TargetPath $CredentialsPath -Content $cr
 $sourceAgents = Join-Path $PSScriptRoot "AGENTS.md"
 $targetAgents = Join-Path $DshHome "AGENTS.md"
 if (Test-Path $sourceAgents) {
-    Write-Host "  -> Cap nhat AGENTS.md tai $targetAgents..." -ForegroundColor Green
-    if (-not $DryRun) {
-        $agentsDir = Split-Path $targetAgents -Parent
-        if (-not (Test-Path $agentsDir)) { New-Item -ItemType Directory -Path $agentsDir -Force | Out-Null }
-        Copy-Item -Path $sourceAgents -Destination $targetAgents -Force
+    if (Test-Path $targetAgents) {
+        if ($Force -or $OverwriteAll) {
+            Write-Host "  -> File '$targetAgents' da ton tai. [-Force / -OverwriteAll] Tu dong sao luu va ghi de." -ForegroundColor Yellow
+            $bak = "$targetAgents.bak"
+            Copy-Item -Path $targetAgents -Destination $bak -Force
+            if (-not $DryRun) {
+                Copy-Item -Path $sourceAgents -Destination $targetAgents -Force
+            }
+        } else {
+            $choice = Read-Host "[?] File '$targetAgents' da ton tai. Ban co muon [O]verwrite (ghi de) hay [S]kip (bo qua)? [O/s]"
+            if ($choice.Trim().ToLower() -eq 's') {
+                Write-Host "  -> Bo qua file $targetAgents." -ForegroundColor DarkGray
+            } else {
+                $bak = "$targetAgents.bak"
+                Copy-Item -Path $targetAgents -Destination $bak -Force
+                if (-not $DryRun) {
+                    Copy-Item -Path $sourceAgents -Destination $targetAgents -Force
+                }
+                Write-Host "  -> Ghi de file $targetAgents thanh cong." -ForegroundColor Green
+            }
+        }
+    } else {
+        Write-Host "  -> Tao moi file $targetAgents thanh cong." -ForegroundColor Green
+        if (-not $DryRun) {
+            $agentsDir = Split-Path $targetAgents -Parent
+            if (-not (Test-Path $agentsDir)) { New-Item -ItemType Directory -Path $agentsDir -Force | Out-Null }
+            Copy-Item -Path $sourceAgents -Destination $targetAgents -Force
+        }
     }
 }
 
